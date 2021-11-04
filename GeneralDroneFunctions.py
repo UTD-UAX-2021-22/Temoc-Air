@@ -1,3 +1,8 @@
+"""
+	Please stick to the syntax conventions when adding new functions
+	Uncomment the main at the bottom to test anything
+"""
+
 from dronekit import connect, mavutil, VehicleMode, LocationGlobalRelative, APIException
 import time
 import socket
@@ -218,46 +223,46 @@ def MetersToYards(meters):
 """
 
 #Connect to vehicle UDP endpoint or simulator
-vehicle = connect('127.0.0.1:port', wait_Ready = True)
-curMode = "ENABLED" # Set to "GROUND" when not testing
-wayPointCount = 0
+# vehicle = connect('127.0.0.1:port', wait_Ready = True)
+# curMode = "ENABLED" # Set to "GROUND" when not testing
+# wayPointCount = 0
 
-while True:
-	if curMode == "GROUND":
-		time.sleep(2)
-		if wayPointCount > 0: # exampl if else for determing challenge not functional right now
-			print("Valid Challange Uploaded -> Procees")
-			curMode = "CHALLANGE1_TEST"
-	elif curMode = "CHALLENGE1_TEST":
-		ArmAndTakeoff(YardsToMeters(30))
-		homeLocation = vehicle.location.global_relative_frame
-		vehicle.airspeed = 4
-		GoToTargetBody(FeetToMeters(25), 0, 0)
+# while True:
+# 	if curMode == "GROUND":
+# 		time.sleep(2)
+# 		if wayPointCount > 0: # exampl if else for determing challenge not functional right now
+# 			print("Valid Challange Uploaded -> Procees")
+# 			curMode = "CHALLANGE1_TEST"
+# 	elif curMode = "CHALLENGE1_TEST":
+# 		ArmAndTakeoff(YardsToMeters(30))
+# 		homeLocation = vehicle.location.global_relative_frame
+# 		vehicle.airspeed = 4
+# 		GoToTargetBody(FeetToMeters(25), 0, 0)
 
-		while vehicle.mode.name == "GUIDED":
-			distanceTraeled = GetDistanceMeters(vehicle.location.global_relative_frame, home_location)
-			print(f"Distance traveled: {distanceTraveled}")
-			if distanceTraeled >= target_meters * 0.99:
-				print("Target Reached")
-				break
-			time.sleep(1)
+# 		while vehicle.mode.name == "GUIDED":
+# 			distanceTraeled = GetDistanceMeters(vehicle.location.global_relative_frame, home_location)
+# 			print(f"Distance traveled: {distanceTraveled}")
+# 			if distanceTraeled >= target_meters * 0.99:
+# 				print("Target Reached")
+# 				break
+# 			time.sleep(1)
 		
-		LandDrone()
-	elif curMode == "BASIC_TEST":
-		# Prep drone for flight and rise to a altidude of 15
-		ArmAndTakeoff(15)
+# 		LandDrone()
+# 	elif curMode == "BASIC_TEST":
+# 		# Prep drone for flight and rise to a altidude of 15
+# 		ArmAndTakeoff(15)
 
-		# Rn this just switches the vehicle mode to AUTO
-		GetCurrentChallenge(vehicle)
+# 		# Rn this just switches the vehicle mode to AUTO
+# 		GetCurrentChallenge(vehicle)
 
-		# Fly North and up
-		VelocityControl(2, 0, -0.5, 5)
+# 		# Fly North and up
+# 		VelocityControl(2, 0, -0.5, 5)
 
-		# Print various telemetry data
-		PrintTelemetry()
+# 		# Print various telemetry data
+# 		PrintTelemetry()
 
-		# Land Drone wherever it currently is at
-		LandDrone()
+# 		# Land Drone wherever it currently is at
+# 		LandDrone()
 
-		# Stop copter from running
-		vehicle.close()
+# 		# Stop copter from running
+# 		vehicle.close()
