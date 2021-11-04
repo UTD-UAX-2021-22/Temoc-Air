@@ -1,17 +1,8 @@
 from dronekit import connect, mavutil, VehicleMode, LocationGlobalRelative, APIException
-from geographiclib.geodesic import Geodesic
 import time
 import socket
 import math
 import argparse # Allows to input vals from command line to use them in python
-
-def ChangeMode(mode):
-    print(f"Enabling {mode} Mode for Copter")
-    while vehicle.mode != VehicleMode(mode):
-            vehicle.mode = VehicleMode(mode)
-            time.sleep(1)
-    print(f"Drone is in {mode} Mode")
-    return True
 
 def ConnectToCopter():
 	parser = argparse.ArgumentParser(description='commands')
@@ -30,7 +21,7 @@ def ConnectToCopter():
 	vehicle = connect(connection_string, wait_ready=True)
 	return vehicle
 
-def ArmCopter():
+def ArmAndTakeoff(targetAltitude):
 	print("Copter Pre-Arm Checks")
 	while not vehicle.is_armable: #Ensure autopilot is ready
 		print(" Waiting for Copter to initialise...")
@@ -42,7 +33,12 @@ def ArmCopter():
 		time.sleep(1)
 	print("Copter GPS Ready")
 
-	ChangeMode("GUIDED")
+	print("Enabling GUIDED Mode for Copter")
+	vehicle.mode = VehicleMode("GUIDED") #Copter is armed in GUIDED mode
+	while vehicle.mode != "GUIDED":
+		print("Drone is not in GUIDED Mode...")
+		time.sleep(1)
+	print("Drone is in GUIDED Mode")
 
 	print("Arming Copter")
 	vehicle.armed = True
@@ -50,21 +46,8 @@ def ArmCopter():
 		print(" Waiting for Copter arming...")
 		time.sleep(1)
 	print("Drone is Armed")
- 
-def ElevateCopter(targetAltitude):
-	print("Flying up to %s meters" % targetAltitude)
-	vehicle.simple_takeoff(targetAltitude) # Begin takeoff procedure to reach elevation
- 
-	# Wait to reach the target altitude
-	while True:
-		altitude = vehicle.location.global_relative_frame.alt
-		if altitude >= targetAltitude -1:
-			print("Altitude of %sm reached", targetAltitude)
- 			break
-        time.sleep(1)
-        print("Drone has reached target elevation")
 
-""" Move copter in direction based on specified velocity vectors, velX and VelY are parallel to the North and East direction 	(not to the front and sie of the vehicle). velZ is perpendicular to the plane of velX and velY, with a positive value towards the ground (so up is negative) following right-hand convention
+"""Move copter in direction based on specified velocity vectors, velX and VelY are parallel to the North and East direction (not to the front and sie of the vehicle). velZ is perpendicular to the plane of velX and velY, with a positive value towards the ground (so up is negative) following right-hand convention
 
 	velX > 0 -> fly North
 	velX < 0 -> fly South
@@ -75,7 +58,7 @@ def ElevateCopter(targetAltitude):
 
 	Local Tangent Plane Coorindaties Wiki -> https://en.wikipedia.org/wiki/Local_tangent_plane_coordinates
 """
-def VelocityControl(velX, velY, velZ, duration):
+def FrameVelocityControl(velX, velY, velZ, duration):
 	instructions = vehicle.message_factory.set_position_target_local_ned_encode(
         0,       # time_boot_ms (not used)
         0, 0,    # target system, target component
@@ -90,62 +73,8 @@ def VelocityControl(velX, velY, velZ, duration):
 	for x in range(0, duration):
 		vehicle.send_mavlink(instructions)
 		time.sleep(1)
-	vehicle.flush()
 
-def body_ned_velocity(velocity_x, velocity_y, velocity_z, duration):
-    """
-    Move vehicle in direction based on specified velocity vectors.
-    X will move the drone forward and backwards
-    y will move the drone left and right
-    z is up and down
-    """
-    msg = vehicle.message_factory.set_position_target_local_ned_encode(
-        0,       # time_boot_ms (not used)
-        0, 0,    # target system, target component
-        mavutil.mavlink.MAV_FRAME_BODY_NED, # frame
-        0b0000111111000111, # type_mask (only speeds enabled)
-        0, 0, 0, # x, y, z positions (not used)
-        velocity_x, velocity_y, velocity_z, # x, y, z velocity in m/s
-        0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
-        0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
-
-
-    # send command to vehicle on 1 Hz cycle
-    for x in range(0,duration):
-        vehicle.send_mavlink(msg)
-        time.sleep(1)
-
-def goto_target_body_ned(north, east, down):
-    """
-    Send command to request the vehicle fly to a specified
-    location in the North, East, Down frame of the drone's body. So north is direction that
-    drone is facing.
-    """
-    msg = vehicle.message_factory.set_position_target_local_ned_encode(
-        0,       # time_boot_ms (not used)
-        0, 0,    # target system, target component
-        mavutil.mavlink.MAV_FRAME_BODY_NED, # frame
-        0b0000111111111000, # type_mask (only positions enabled)
-        north, east, down,
-        0, 0, 0, # x, y, z velocity in m/s  (not used)
-        0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
-        0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
-    # send command to vehicle
-    vehicle.send_mavlink(msg)
-
-def get_distance_metres(aLocation1, aLocation2):
-    """
-    Returns the ground distance in metres between two LocationGlobal objects.
-
-    This method is an approximation, and will not be accurate over large distances and close to the
-    earth's poles. It comes from the ArduPilot test code:
-    https://github.com/diydrones/ardupilot/blob/master/Tools/autotest/common.py
-    """
-    dlat = aLocation2.lat - aLocation1.lat
-    dlong = aLocation2.lon - aLocation1.lon
-    return math.sqrt((dlat*dlat) + (dlong*dlong)) * 1.113195e5
-
-""" Rotates the camera to a specific vector in space and tracks a location of interest.
+"""Rotates the camera to a specific vector in space and tracks a location of interest.
 
 	@param pitch [byte], Gimbal pitch in degrees relative to the vehicle (see diagram for attitude). A value of 0 represents a camera pointed straight ahead relative to the front of the vehicle, while -90 points the camera straight down.
 
@@ -162,69 +91,63 @@ def GimbalMovement(pitch, roll, yaw, locationRoi):
 	#Set gimbal/camera to track specified location in global relative frame
 	vehicle.gimbal.target_location(locationRoi)
 
-"""Download current challenge from the copter (Not Working unsure about how challnege files are grabbed as a mission)
-"""
+"""Download current challenge from the copter"""
 def DownloadChallenge():
 	commands = vehicle.commands
 	commands.download()
 	commands.wait_ready() # Wait until download is finished
 
-"""Clears the Current mission (challenge) (Not Working unsure about how challnege files are grabbed as a mission)
-"""
+
+"""Clears the Current mission (challenge)"""
 def ClearCurrentChallenge():
 	# commands = vehicle.commands
 	print("Clearing current challenge/mission from vehicle")
 	vehicle.commands.clear() # Clear current mission
 	vehicle.flush()
- 
-	# After clearing you must re-download the mission from vehicle to enable vehicle.commands again (might be a depreciated bug)
-	DownloadChallenge()
 
-"""(Unsure about how getting challange file works still) It's supposed to Get challenge file from copter
-	but right now it just sets the copter to AUTO mode
-"""
+"""(Unsure about how getting challange file works still) Get challenge file from copter"""
 def GetCurrentChallenge(challenge):
-	ChangeMode("AUTO")
+	vehicle.mode = VehicleMode("AUTO")
+	while vehicle.mode != "AUTO":
+		print("Setting copter into AUTO mode...")
+		time.sleep(1)
+	print("Vehicle is in AUTO mode")
 
-"""Read various info from the copter
-"""
+"""Read various info from the copter"""
 def PrintTelemetry():
 	vehicle.wait_ready('autopilot_version')
-	print("Autopilot version: %s" %vehicle.version)
+	print('Autopilot version: %s'%vehicle.version)
 
 	# Does the firmware support the companion pc to set the attitude?
-	print("Supports set attitude from companion: %s" %vehicle.capabilities.set_attitude_target_local_ned)
+	print('Supports set attitude from companion: %s'%vehicle.capabilities.set_attitude_target_local_ned)
 
 	# Get the actual position
-	print("Position: %s" % vehicle.location.global_relative_frame)
+	print('Position: %s'% vehicle.location.global_relative_frame)
 
 	# Get the actual attitude roll, pitch, yaw
-	print("Attitude: %s" % vehicle.attitude)
+	print('Attitude: %s'% vehicle.attitude)
 
 	# Get the actual velocity (m/s)
-	print("Velocity: %s (m/s)" % vehicle.velocity) # North, east, down
+	print('Velocity: %s (m/s)'%vehicle.velocity) # North, east, down
 
 	# When did we receive the last heartbeat
-	print("Last Heartbeat: %s" % vehicle.last_heartbeat)
+	print('Last Heartbeat: %s'%vehicle.last_heartbeat)
 
 	# Is the vehicle good to Arm?
-	print("Is the vehicle armable: %s" % vehicle.is_armable)
+	print('Is the vehicle armable: %s'%vehicle.is_armable)
 
-	# What is the total ground speed?
-	print("Groundspeed: %s" % vehicle.groundspeed) #(%)
+	# Which is the total ground speed?
+	print('Groundspeed: %s'% vehicle.groundspeed) #(%)
 
 	# What is the actual flight mode? 
-	print("Mode: %s" % vehicle.mode.name)
+	print('Mode: %s'% vehicle.mode.name)
 
-	# Is the state estimation filter ok?
-	print("EKF Ok: %s" %vehicle.ekf_ok)
- 
-	# What is the maximum throttle
- 	print("Maximum Throttle: %d" % vehicle.parameters['THR_MIN']) 
+	# Is thestate estimation filter ok?
+	print('EKF Ok: %s'%vehicle.ekf_ok)
 
-""" Send MAV_CMD_DO_SET_ROI message to point camera gimbal at a 
+"""Send MAV_CMD_DO_SET_ROI message to point camera gimbal at a 
     specified region of interest (LocationGlobal).
-	The vehicle may also turn to face the ROI.
+    The vehicle may also turn to face the ROI.
 """ 
 def SetLocationRoi(location):
     # create the MAV_CMD_DO_SET_ROI command
@@ -241,41 +164,6 @@ def SetLocationRoi(location):
     # Send command to copter
     vehicle.send_mavlink(locMsg)
 
-""" Point vehicle at a specified heading (in degrees). Sets an absolute heading by default, but you can 	set the relative param 		to "True" to set the yaw relative to the current yaw heading.
-
-	More Info:
- 	(https://ardupilot.org/copter/docs/mission-command-list.html#condition-yaw)
-    
-    By default the yaw of the vehicle will follow the direction of travel. After setting 
-    the yaw using this function there is no way to return to the default yaw "follow direction 
-    of travel" behaviour (https://github.com/diydrones/ardupilot/issues/2427)
-"""
-def ConditionYaw(heading, relative = False):
-    if relative:
-        isRelative = 1 # yaw is relative to direction of travel
-    else:
-        isRelative = 0 # yaw is an absolute angle
-        
-    # create the CONDITION_YAW command using command_long_encode()
-    msg = vehicle.message_factory.command_long_encode(
-        0, 0,        # target system, target component
-        mavutil.mavlink.MAV_CMD_CONDITION_YAW, #command
-        0,           # confirmation
-        heading,     # param 1, yaw in degrees
-        0,           # param 2, yaw speed deg/s
-        1,           # param 3, direction -1 ccw, 1 cw
-        isRelative,  # param 4, relative offset 1, absolute angle 0
-        0, 0, 0)     # param 5 ~ 7 not used
-    
-    # send command to vehicle
-    vehicle.send_mavlink(msg)
-
-"""Aproximation of the bearing for medium latitudes and short distances
-"""
-def GetBearing(lat1, lat2, long1, long2):
-    brng = Geodesic.WGS84.Inverse(lat1, long1, lat2, long2)['azi1']
-    return brng
-
 def LandDrone():
 	print("Setting copter into LAND mode")	
 	vehicle.mode = VehicleMode('LAND')
@@ -290,10 +178,38 @@ def LandDrone():
 			landed = True # It has landed
 	print("The copter has landed!")
 
+""" Send command to request the vehicle fly to a specified
+    location in the North, East, Down frame of the drone's body. So north is direction that
+    drone is facing.
+"""
+def GoToTargetBody(north, east, down):
+	msg = vehicle.message_factory.set_position_target_local_ned_encode(
+        0,       # time_boot_ms (not used)
+        0, 0,    # target system, target component
+        mavutil.mavlink.MAV_FRAME_BODY_NED, # frame
+        0b0000111111111000, # type_mask (only positions enabled)
+        north, east, down,
+        0, 0, 0, # x, y, z velocity in m/s  (not used)
+        0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
+        0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
+    # send command to vehicle
+    vehicle.send_mavlink(msg)
 
- 
-#Connect to vehicle UDP endpoint or simulator
-vehicle = connect('127.0.0.1:14550', wait_Ready = True) # IP Address is random?
+""" Returns the ground distance in metres between two LocationGlobal objects.
+    This method is an approximation, and will not be accurate over large distances and close to the
+    earth's poles. It comes from the ArduPilot test code:
+    https://github.com/diydrones/ardupilot/blob/master/Tools/autotest/common.py
+"""
+def GetDistanceInMeters(aLoc1, aLoc2):
+    dlat = aLoc2.lat - aLoc1.lat
+    dlong = aLoc2.lon - aLoc1.lon
+    return math.sqrt((dlat * dlat) + (dlong * dlong)) * 1.113195e5
+
+def YardsToMeters(yards):
+	return yards / 1.094
+
+def MetersToYards(meters):
+	return meters * 1.0936132983
 
 """
 ----------------------
@@ -301,30 +217,40 @@ vehicle = connect('127.0.0.1:14550', wait_Ready = True) # IP Address is random?
 ----------------------
 """
 
-""" Main Function for Testing
+#Connect to vehicle UDP endpoint or simulator
+vehicle = connect('127.0.0.1:port', wait_Ready = True)
 curMode = "ENABLED" # Set to "GROUND" when not testing
+wayPointCount = 0
 
 while True:
-	if curMode == "GROUND": # Do some prep and switch to "ENABLED", this is mainly used to get the next "mission" or challenge file to run and prep the copter before actually running the script
+	if curMode == "GROUND":
 		time.sleep(2)
-		curMode = "ENABLED"
-	elif curMode == "ENABLED":
-		#Connec to copter
-		ConnectToCopter()
-  
-		# Prep drone for flight
-		ArmCopter()
-  
-		# Rise drone to set altitude
-		ElevateCopter(15)
-  
-		# Set the default speed
-		vehicle.airspeed = 5;
+		if wayPointCount > 0: # exampl if else for determing challenge not functional right now
+			print("Valid Challange Uploaded -> Procees")
+			curMode = "CHALLANGE1_TEST"
+	elif curMode = "CHALLENGE1_TEST":
+		ArmAndTakeoff(YardsToMeters(30))
+		homeLocation = vehicle.location.global_relative_frame
+		vehicle.airspeed = 4
+		GoToTargetBody(FeetToMeters(25), 0, 0)
 
-		# Right now this just switches the vehicle mode to AUTO
+		while vehicle.mode.name == "GUIDED":
+			distanceTraeled = GetDistanceMeters(vehicle.location.global_relative_frame, home_location)
+			print(f"Distance traveled: {distanceTraveled}")
+			if distanceTraeled >= target_meters * 0.99:
+				print("Target Reached")
+				break
+			time.sleep(1)
+		
+		LandDrone()
+	elif curMode == "BASIC_TEST":
+		# Prep drone for flight and rise to a altidude of 15
+		ArmAndTakeoff(15)
+
+		# Rn this just switches the vehicle mode to AUTO
 		GetCurrentChallenge(vehicle)
 
-		# Fly North and up for a duration of 5s
+		# Fly North and up
 		VelocityControl(2, 0, -0.5, 5)
 
 		# Print various telemetry data
@@ -334,5 +260,4 @@ while True:
 		LandDrone()
 
 		# Stop copter from running
-		vehicle.close() 
-"""
+		vehicle.close()
