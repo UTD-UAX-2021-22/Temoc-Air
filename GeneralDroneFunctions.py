@@ -170,25 +170,6 @@ def PrintTelemetry():
     # Is thestate estimation filter ok?
     print(f"EKF Ok: {vehicle.ekf_ok}")
 
-"""Send MAV_CMD_DO_SET_ROI message to point camera gimbal at a 
-    specified region of interest (LocationGlobal).
-    The vehicle may also turn to face the ROI.
-"""
-def SetLocationRoi(location):
-    # create the MAV_CMD_DO_SET_ROI command
-    locMsg = vehicle.message_factory.command_long_encode(
-        0, 0,  # target system, target component
-        mavutil.mavlink.MAV_CMD_DO_SET_ROI,  # command
-        0,  # confirmation
-        0, 0, 0, 0,  # params 1-4
-        location.lat,
-        location.lon,
-        location.alt
-    )
-
-    # Send command to copter
-    vehicle.send_mavlink(locMsg)
-
 def LandDrone():
     print("Setting copter into LAND mode")
     vehicle.mode = VehicleMode('LAND')
