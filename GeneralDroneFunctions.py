@@ -259,8 +259,15 @@ def SetROI(loc):
 -------- Main --------
 ----------------------
 
-# Connect to vehicle UDP endpoint or simulator
-vehicle = connect('127.0.0.1:14550', wait_ready=True)
+# Connect to vehicle UDP endpoint for simulator
+# vehicle = connect('127.0.0.1:14550', wait_ready=True)
+# Connect to vehicle over com port serial
+vehicle = connect('/dev/serial0', wait_ready=True, baud=921600)
+
+# TODO: add function or code here that asks for user input on what challenge to run 
+# EX: print "1. Test" , "2. Challenge 1" , "3.." etc. for all challenge functions
+# Ask user which one of these to run, get their input and set it as curMode with a switch statement or whatever
+
 curMode = "CHALLENGE1_TEST" # Set to "GROUND" when not testing
 wayPointCount = 0
 
@@ -272,7 +279,7 @@ if curMode == "GROUND":
 		curMode = "CHALLENGE1_TEST"
 elif curMode == "CHALLENGE1_TEST":
 	targetMeters = YardsToMeters(30)
-	targetAltitude = FeetToMeters(25)
+	targetAltitude = FeetToMeters(15)
     
 	ArmDrone()
 	TakeOffDrone(targetAltitude)
@@ -294,6 +301,7 @@ elif curMode == "CHALLENGE1_TEST":
 		time.sleep(1)
 
 	LandDrone()
+	vehicle.close() #stop copter from running
 elif curMode == "BASIC_TEST":
 	# Prep drone for flight and rise to a altidude of 15
 	ArmDrone()
