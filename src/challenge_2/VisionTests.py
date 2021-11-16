@@ -49,9 +49,10 @@ if __name__ == "__main__":
     enableOverlay = False
     optical_flow_features = []
     enableOpening = False
-    targetHue = (3/360)*255
-    hueTolerance = 0.05
-    cap = cv2.VideoCapture("rtsp://192.168.137.129:8080/video/h264")
+    targetHue = (336.7/360)*255
+    hueTolerance = 0.10
+    cap = cv2.VideoCapture("2021_11_12_10_58_15.mp4")
+    contours_enabled = False
 
     open_kernel_size = 10
     opening_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (open_kernel_size, open_kernel_size))
@@ -62,7 +63,7 @@ if __name__ == "__main__":
         success, img = cap.read()
         frame_memory.appendleft(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV_FULL);
-        findArucoMarkers(img) 
+        # findArucoMarkers(img) 
         mskh = maskHue(targetHue, hueTolerance, hsv[:,:,0])
 
         if enableOpening:
@@ -91,6 +92,12 @@ if __name__ == "__main__":
         if optical_flow_enabled:
             imageShow
         
+        if contours_enabled:
+            contours, _ = cv2.findContours(mskh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = [cont for cont in contours if cv2.contourArea(cont) > 10]
+            cv2.drawContours(imageShow, contours, -1, (255, 255, 0), 4)
+
+
         cv2.imshow('img', imageShow)
         k = cv2.waitKey(1) & 0xff
         
@@ -117,7 +124,8 @@ if __name__ == "__main__":
         if k == ord('t'):
             optical_flow_enabled = not optical_flow_enabled
             optical_flow_features = cv2.goodFeaturesToTrack(frame_memory[0], mask = mskh, **optical_flow_feature_params)
-        
+        if k == ord('c'):
+            contours_enabled = not contours_enabled
 
 
 
