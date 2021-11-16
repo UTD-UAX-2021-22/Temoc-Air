@@ -18,10 +18,11 @@ if __name__ == "__main__":
     cam_front = cv2.VideoCapture(0)
     cam_down = cv2.VideoCapture(1)
     vehicle = gd.ConnectToCopter()
-    gd.ArmAndTakeoff(7.62)
+    gd.ArmDrone()
+    gd.TakeOffDrone(7.62)
 
     logo_found = False
-
+    
     while True:
         if not logo_found:
             img_front = cam_front.read()
