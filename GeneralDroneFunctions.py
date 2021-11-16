@@ -150,44 +150,25 @@ def PrintTelemetry():
     print(f"Position: {vehicle.location.global_relative_frame}")
 
     # Get the actual attitude roll, pitch, yaw
-    print('Attitude: %s' % vehicle.attitude)
+    print(f"Attitude: {vehicle.attitude}");
 
     # Get the actual velocity (m/s)
-    print('Velocity: %s (m/s)' % vehicle.velocity)  # North, east, down
+    print(f"Velocity: {vehicle.velocity} (m/s)")  # North, east, down
 
     # When did we receive the last heartbeat
-    print('Last Heartbeat: %s' % vehicle.last_heartbeat)
+    print(f"Last Heartbeat: {vehicle.last_heartbeat}")
 
     # Is the vehicle good to Arm?
-    print('Is the vehicle armable: %s' % vehicle.is_armable)
+    print(f"Is the vehicle armable: {vehicle.is_armable}")
 
     # Which is the total ground speed?
-    print('Groundspeed: %s' % vehicle.groundspeed)  # (%)
+    print(f"Groundspeed: {vehicle.groundspeed}")
 
     # What is the actual flight mode?
-    print('Mode: %s' % vehicle.mode.name)
+    print(f"Mode: {vehicle.mode.name}")
 
     # Is thestate estimation filter ok?
-    print('EKF Ok: %s' % vehicle.ekf_ok)
-
-"""Send MAV_CMD_DO_SET_ROI message to point camera gimbal at a 
-    specified region of interest (LocationGlobal).
-    The vehicle may also turn to face the ROI.
-"""
-def SetLocationRoi(location):
-    # create the MAV_CMD_DO_SET_ROI command
-    locMsg = vehicle.message_factory.command_long_encode(
-        0, 0,  # target system, target component
-        mavutil.mavlink.MAV_CMD_DO_SET_ROI,  # command
-        0,  # confirmation
-        0, 0, 0, 0,  # params 1-4
-        location.lat,
-        location.lon,
-        location.alt
-    )
-
-    # Send command to copter
-    vehicle.send_mavlink(locMsg)
+    print(f"EKF Ok: {vehicle.ekf_ok}")
 
 def LandDrone():
     print("Setting copter into LAND mode")
@@ -237,13 +218,56 @@ def YardsToMeters(yards):
 def FeetToMeters(feet):
 	return feet * 0.3048
 
+def SetConditionYaw(heading, relative = False):
+    """ The vehicle “yaw” is the direction that the vehicle is facing in the horizontal plane. On Copter this yaw need not be the direction of travel (though it is by default).
+    """
+    if relative:
+        relativeToDirOfTravel = 1 # yaw relative to direction of travel
+    else:
+        relativeToDirOfTravel = 0 # yaw is an absolute angle
+    # create the CONDITION_YAW command using command_long_encode()
+    msg = vehicle.message_factory.command_long_encode(
+        0, 0,    # target system, target component
+        mavutil.mavlink.MAV_CMD_CONDITION_YAW, #command
+        0, #confirmation
+        heading,    # param 1, yaw in degrees
+        0,          # param 2, yaw speed deg/s
+        1,          # param 3, direction -1 ccw, 1 cw
+        relativeToDirOfTravel, # param 4, relative offset 1, absolute angle 0
+        0, 0, 0)    # param 5 ~ 7 not used
+    # send command to vehicle
+    vehicle.send_mavlink(msg)
+
+def SetROI(loc):
+    """ Set ROI command to point camer gimbal at a specified region of interest, drone must also turn to face ROI
+    """
+    # create the MAV_CMD_DO_SET_ROI command
+    msg = vehicle.message_factory.command_long_encode(
+        0, 0,    # target system, target component
+        mavutil.mavlink.MAV_CMD_DO_SET_ROI, #command
+        0, #confirmation
+        0, 0, 0, 0, #params 1-4
+        loc.lat,
+        loc.lon,
+        loc.alt
+        )
+    # send command to vehicle
+    vehicle.send_mavlink(msg)
+
 """
 ----------------------
 -------- Main --------
 ----------------------
 
-# Connect to vehicle UDP endpoint or simulator
-vehicle = connect('127.0.0.1:14550', wait_ready=True)
+# Connect to vehicle UDP endpoint for simulator
+# vehicle = connect('127.0.0.1:14550', wait_ready=True)
+# Connect to vehicle over com port serial
+vehicle = connect('/dev/serial0', wait_ready=True, baud=921600)
+
+# TODO: add function or code here that asks for user input on what challenge to run 
+# EX: print "1. Test" , "2. Challenge 1" , "3.." etc. for all challenge functions
+# Ask user which one of these to run, get their input and set it as curMode with a switch statement or whatever
+
 curMode = "CHALLENGE1_TEST" # Set to "GROUND" when not testing
 wayPointCount = 0
 
@@ -255,7 +279,7 @@ if curMode == "GROUND":
 		curMode = "CHALLENGE1_TEST"
 elif curMode == "CHALLENGE1_TEST":
 	targetMeters = YardsToMeters(30)
-	targetAltitude = FeetToMeters(25)
+	targetAltitude = FeetToMeters(15)
     
 	ArmDrone()
 	TakeOffDrone(targetAltitude)
@@ -277,6 +301,7 @@ elif curMode == "CHALLENGE1_TEST":
 		time.sleep(1)
 
 	LandDrone()
+	vehicle.close() #stop copter from running
 elif curMode == "BASIC_TEST":
 	# Prep drone for flight and rise to a altidude of 15
 	ArmDrone()
