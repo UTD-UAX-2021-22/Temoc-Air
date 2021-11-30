@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Any, Dict, List, Tuple
 import cv2
 import cv2.aruco as aruco # type: ignore
 from enum import Enum, auto
@@ -25,6 +25,7 @@ def template_from_image(image, markersToFind=None, markerSize = 4, totalMarkers=
     return {id:corn.reshape(4,2) for (corn, id) in zip(corners, ids.flatten()) if (markersToFind is None) or (id in markersToFind) }, (x/2, y/2)
 
 
+
 def comp_homograph(detected: Dict[int, np.ndarray], template: Dict[int, np.ndarray]):
     common_marker_ids = set(detected.keys()).intersection(set(template.keys()))
 
@@ -36,12 +37,12 @@ def comp_homograph(detected: Dict[int, np.ndarray], template: Dict[int, np.ndarr
     
 
 
-def findArucoMarkers(img, markerSize = 4, totalMarkers=250, draw=True, enablePrint=False):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+def findArucoMarkers(img, markerSize = 4, totalMarkers=250, detectorParams=aruco.DetectorParameters_create(), draw=False, enablePrint=False):
+    # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
     arucoDict = aruco.Dictionary_get(key)
-    arucoParam = aruco.DetectorParameters_create()
-    bboxs, ids, rejected = aruco.detectMarkers(gray, arucoDict, parameters = arucoParam)
+    arucoParam = detectorParams
+    bboxs, ids, rejected = aruco.detectMarkers(img, arucoDict, parameters = arucoParam)
     if enablePrint and (ids is not None):
         print(ids)
     if draw:
@@ -55,23 +56,94 @@ class DetectionInfo(Enum):
     NOT_FOUND = auto()
     NORMAL = auto()
 
+def createMaskFromBoxes(rects, shape, enlargment_size):
+    enlarged_rects = [(center, (w + enlargment_size, h + enlargment_size), angle) for center, (w,h), angle in rects]
+
+    color = (255, 255, 255)
+    mask = np.zeros(shape, dtype="uint8")
+
+    for rect in enlarged_rects:
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        cv2.drawContours(mask,[box],0,color,-1)
+
+    return mask
+
+@dataclass
+class LogoDetector:
+    projected_markers: List[Any] = field(default_factory=list, init=False)
+    def processFrame(self, frame_buffer: collections.deque, frame=None, frame_gray=None, debug=False) -> Tuple[bool, Any]:
+        template_ids = range(5)
+        frame = frame_buffer[0]["BGR"]
+
+        original_bboxs, ids_found, rejected = findArucoMarkers(frame)
+        if original_bboxs is None or ids_found is None:
+            return False, None
+
+        lk_params = dict( winSize  = (15,15), maxLevel = 2, criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+
+
+        for id, original_points, prior_frame_pts in self.projected_markers:
+            new_points, stat, _ = cv2.calcOpticalFlowPyrLK(frame_buffer[1]["GRAY"], frame_buffer[0]["GRAY"], prior_frame_pts, None, **lk_params)
+            new_orig = original_points[stat==1]
+            new_points = new_points[stat==1]
+            
+
+        ids_found = ids_found.flatten()
+
+        bboxs: List[Tuple[int, np.ndarray]] = [(id, box) for box, id in zip(original_bboxs, ids_found) if id in template_ids]
+
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame_gray is None else frame_gray
+
+        aruco_rects = [cv2.minAreaRect(bbox.reshape(4,2)) for _, bbox in bboxs]
+
+        mask = createMaskFromBoxes(aruco_rects, frame.shape[:2], 20)
+
+        masks = [createMaskFromBoxes(rec,  frame.shape[:2], 20) for rec in aruco_rects]
+
+
+
+        
+        optflow_corners = cv2.goodFeaturesToTrack(frame_gray, 20, 0.3, 5, mask=mask)
+
+        
+
+        return False, None
+
+
+
+
+        
+
+
+
 
 def detectLogo(img, logo_markers, markerSize = 4, totalMarkers=50, draw=True, enablePrint=False):
     # Convert input color image into grayscale
     #TODO: Investigate adaptive thresholding
-    #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = img
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # gray = img
     key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
     arucoDict = aruco.Dictionary_get(key)
     arucoParam = aruco.DetectorParameters_create()
     arucoParam.adaptiveThreshWinSizeMax = 13
-    bboxs, ids_found, rejected = aruco.detectMarkers(gray, arucoDict, parameters = arucoParam)
+    bboxs, ids_found, rejected = aruco.detectMarkers(img, arucoDict, parameters = arucoParam)
     wasFound = False
     detType = DetectionInfo.NOT_FOUND
     
+    # detector = LogoDetector()
+
+    # aaaaa = detector.processFrame(img, bboxs, ids_found, rejected)
+    # cv2.bitwise_and(img, aaaaa, dst= img)
     if ids_found is None:
         return False, {}, detType
-    
+    color = np.random.randint(0,255,(100,3))
+    optflow_corners = cv2.goodFeaturesToTrack(gray, 100, 0.3, 5)
+
+    for i, corner in enumerate(optflow_corners):
+        a,b = corner.ravel()
+        cv2.circle(img,(int(a),int(b)),5,color[i].tolist(), -1)
+
     ids_found = ids_found.flatten()
 
     id_set = set(ids_found)
@@ -99,7 +171,8 @@ def detectLogo(img, logo_markers, markerSize = 4, totalMarkers=50, draw=True, en
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test logo detection")
-    parser.add_argument('video_input_path', default="rtsp://192.168.137.234:8080/video/h264", nargs='?')
+    # parser.add_argument('video_input_path', default="rtsp://192.168.137.234:8080/video/h264", nargs='?')
+    parser.add_argument('video_input_path', default="mavic_test_11_12_closeup.mp4", nargs='?')
     parser.add_argument('template', default="logo_template_2.png",  nargs='?')
     args = parser.parse_args()
 
@@ -110,6 +183,10 @@ if __name__ == "__main__":
     cap = cv2.VideoCapture(args.video_input_path)
     text_org = (50, 100)
     font = cv2.FONT_HERSHEY_SIMPLEX
+
+    # detector = LogoDetector()
+    # detector.processFrame(template_image)
+
     while True:
         success, img = cap.read()
         logo_detected, det_dict, detType = detectLogo(img, marker_ids)
@@ -126,6 +203,12 @@ if __name__ == "__main__":
             cv2.putText(img, f"Logo Found: {logo_detected}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
         cv2.imshow('img', img)
 
+        # mask = detector.processFrame(img)
+        # if mask is None:
+        cv2.imshow('img', img)
+        # else:
+            # cv2.imshow('img', mask)
+        # print(img)
         k = cv2.waitKey(1) & 0xff
 
         if k == 27:

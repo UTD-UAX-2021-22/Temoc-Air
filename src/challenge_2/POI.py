@@ -1,10 +1,16 @@
-from typing import Any, Dict
+import argparse
+from typing import Any, Dict, Tuple
 import cv2
 from dataclasses import dataclass, field
 import functools
-from challenge_2.VisionTests import maskHue
+# from challenge_2.VisionTests import maskHue
 from cv2.legacy import TrackerMOSSE_create #type: ignore
 
+
+def maskHue(hue, tol, img):
+    _, res = cv2.threshold(img, hue*(1+tol), 0, cv2.THRESH_TOZERO_INV)
+    _, res = cv2.threshold(res, hue*(1-tol), 255, cv2.THRESH_BINARY)
+    return res
 
 class DefaultVars:
     optical_flow_feature_params = dict( maxCorners = 100, qualityLevel = 0.3, minDistance = 10, blockSize = 7 )
@@ -42,12 +48,22 @@ def bbox_area(a):
 
 @dataclass
 class Hue_Detector_Opts:
-    target_hue: float = 342
-    tolerance: float = 0.05
+    target_hue: float = 336.7
+    hue_range: Tuple[float, float] = (320, 360)
+    tolerance: float = 0.10
     opening_size: int = 10
+    value_range: Tuple[float, float] = (0.5*255, 255)
+    saturation_range: Tuple[float, float] = (0.10*255, 255)
 
     def hueInHSV(self):
         return (self.target_hue / 360)*255
+
+    def hueRange_HSVFULL(self):
+        return tuple([(x/360)*255 for x in self.value_range])
+
+    def asUpperLower(self):
+        hl, hu = self.hueRange_HSVFULL()
+        return ((self.hue_range[0]/360)*255, self.saturation_range[0] , self.value_range[0]), ((self.hue_range[1]/360)*255, self.saturation_range[1], self.value_range[1])
 
 
 @functools.cache
@@ -63,15 +79,15 @@ def geoRegister(pix_coords, vehicle_info):
 @dataclass
 class POI_Tracker:
     new_poi_found: bool = field(default=False, init=False)
-    detected_pois: list[Any] = field(default=[], init=False)
-    poi_trackers: Dict[int, Any] = field(default={}, init=False)
-    highest_assigned_id = field(default=1, init=False)
-    minimum_area: int = 10
+    detected_pois: list[Any] = field(default_factory=list, init=False)
+    poi_trackers: Dict[int, Any] = field(default_factory=dict, init=False)
+    highest_assigned_id: int = field(default=1, init=False)
+    minimum_area: int = 4
     hue_detect_params: Hue_Detector_Opts = Hue_Detector_Opts()
-    flow_feature_params: Dict = DefaultVars.optical_flow_feature_params
-    flow_params: Dict = DefaultVars.optical_flow_params
+    flow_feature_params: Dict = field(default_factory=lambda: DefaultVars.optical_flow_feature_params.copy())
+    flow_params: Dict = field(default_factory=lambda: DefaultVars.optical_flow_params.copy())
     
-    def processFrame(self, vehicle, frame_bgr, frame_hsv=None) -> bool:
+    def processFrame(self, vehicle, frame_bgr, frame_hsv=None) -> Tuple[bool, Any]:
         """Process a frame of HSV video and update POI information/detect new POIs
         :param frame: Captured frame in BGR format
         :param vehicle: Dronekit vehicle object
@@ -80,36 +96,66 @@ class POI_Tracker:
             frame_hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV_FULL)
 
 
-        mask = maskHue(self.hue_detect_params.hueInHSV(), self.hue_detect_params.tolerance, frame_hsv)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, getOpeningKernel(self.hue_detect_params.opening_size))
+        mask = maskHue(self.hue_detect_params.hueInHSV(), self.hue_detect_params.tolerance, frame_hsv[:,:,0])
 
-        num_regions, labels = cv2.connectedComponents(mask)
+        # _, mask = cv2.threshold(frame_hsv[:,:,0], self.hue_detect_params.hueRange_HSVFULL()[1], 0, cv2.THRESH_TOZERO_INV)
+        # _, mask = cv2.threshold(mask, self.hue_detect_params.hueRange_HSVFULL()[0], 255, cv2.THRESH_BINARY)
+
+        # mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, getOpeningKernel(self.hue_detect_params.opening_size))
+
+
+        
+        enable_sat = True
+        enable_value = True
+        draw_contours = True
+        in_range = False
+        poi_optical_tracking = False
+
+        if in_range:
+            lower, upper = self.hue_detect_params.asUpperLower()
+            mask = cv2.inRange(frame_hsv, lower, upper)
+
+        if enable_sat:
+            _, sat_mask = cv2.threshold(frame_hsv[:,:,1], self.hue_detect_params.saturation_range[1], 0, cv2.THRESH_TOZERO_INV)
+            _, sat_mask = cv2.threshold(sat_mask, self.hue_detect_params.saturation_range[0], 255, cv2.THRESH_BINARY)
+            mask = cv2.bitwise_and(mask, sat_mask)
+
+        if enable_value:
+            _, value_mask = cv2.threshold(frame_hsv[:,:,2], self.hue_detect_params.value_range[1], 0, cv2.THRESH_TOZERO_INV)
+            _, value_mask = cv2.threshold(value_mask, self.hue_detect_params.value_range[0], 255, cv2.THRESH_BINARY)
+            mask = cv2.bitwise_and(mask, value_mask)
+
+        # num_regions, labels = cv2.connectedComponents(mask)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         contours = [cont for cont in contours if cv2.contourArea(cont) > self.minimum_area]
         
-        detected_poi_bboxes = [cv2.boundingRect(x) for x in contours]
-        
-        new_bboxes = {}
-        failed_tracker_ids = [];
-        for id, tracker in self.poi_trackers.items():
-            res, bbox = tracker.update(frame_bgr)
-            if res:
-                new_bboxes[id] = bbox
-            else:
-                failed_tracker_ids.append(id)
+        if draw_contours:
+             cv2.drawContours(frame_bgr, contours, -1, (255, 255, 0), 2)
 
-        for id in failed_tracker_ids:
-            del self.poi_trackers[id]
+        if poi_optical_tracking:
+            detected_poi_bboxes = [cv2.boundingRect(x) for x in contours]
+            
+            new_bboxes = {}
+            failed_tracker_ids = [];
+            for id, tracker in self.poi_trackers.items():
+                res, bbox = tracker.update(frame_bgr)
+                if res:
+                    new_bboxes[id] = bbox
+                else:
+                    failed_tracker_ids.append(id)
 
-        for det_bbox in detected_poi_bboxes:
-            if all([ (bbox_area(bbox_intersection(x, det_bbox)) / bbox_area(det_bbox)) < 0.80 for x in new_bboxes.values()]):
-                new_id = self.highest_assigned_id
-                self.highest_assigned_id += 1
-                new_tracker = TrackerMOSSE_create()
-                new_tracker.init(frame_bgr, det_bbox)
-                self.poi_trackers[new_id] = new_tracker
-                
+            for id in failed_tracker_ids:
+                del self.poi_trackers[id]
+
+            for det_bbox in detected_poi_bboxes:
+                if all([ (bbox_area(bbox_intersection(x, det_bbox)) / bbox_area(det_bbox)) < 0.80 for x in new_bboxes.values()]):
+                    new_id = self.highest_assigned_id
+                    self.highest_assigned_id += 1
+                    new_tracker = TrackerMOSSE_create()
+                    new_tracker.init(frame_bgr, det_bbox)
+                    self.poi_trackers[new_id] = new_tracker
+                    
             # for track_bbox in new_bboxes.values:
 
         #TODO: Image Segmentation? - In progress
@@ -117,8 +163,32 @@ class POI_Tracker:
                 
         #TODO: Georegistration
             
-        return True
+        return True, None
 
     def getUnvisitedPOIs(self):
         return [];
         
+
+
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Test Far Field Logo detection")
+    parser.add_argument('--video', default="2021_11_12_10_58_15.mp4", nargs='?')
+    # parser.add_argument('template', default="logo_template_2.png",  nargs='?')
+    args = parser.parse_args()
+
+    cap = cv2.VideoCapture(args.video)
+    poi_track = POI_Tracker()
+
+    while True:
+        success, img = cap.read()
+        poi_track.processFrame(None, img)
+
+        cv2.imshow('img', img)
+
+        k = cv2.waitKey(1) & 0xff
+
+        if k == 27:
+            break
