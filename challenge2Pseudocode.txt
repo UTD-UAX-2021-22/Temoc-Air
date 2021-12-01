@@ -1,0 +1,64 @@
+Main():
+    start watchdog timer
+    performChallenge2()
+
+performChallenge2():
+    optimal_elevation = X # Best elevation to view all logos in field
+    liftoff(optimal_elevation)
+    travelToCenterField()
+
+    POIs = {}
+    Angle front camera appropriately
+    while(have not completed 360 view):
+	    Take picture or use live feed
+        potential_POIs = locatePOIs() # add timer of like 12 seconds or so while doing this
+        if potential_POIs not in POIs:
+            add potential_POIs to POIs
+
+	    rotate drone 45 degrees left (or right)
+
+    # Once 360 view is done
+    Adjust the front camera to look directly below
+    Take picture or use live feed
+    potential_POIs = locatePOIs() # add timer of like 12 seconds or so while doing this
+        if potential_POIs not in POIs:
+            add potential_POIs to POIs
+
+    sort POIs in order of optimal traversal
+
+    while drone has not landed on logo:
+        while watchdog timer has not gone off AND there is a POI to visit in POIs (sorted):
+            visitPOI(POI)
+
+        fallbackSearch()
+
+locatePOIs():
+    potential_POIs = {}
+    take image using forward-facing camera
+    convert image to HSV
+
+    for each group of pink border clusters: # Need to ensure we are not adding the same POIs
+        estimate location of group of POI (location will be an attribute to POI)
+        add POI to potential_POIs
+
+    return potential_POIs
+
+
+visitPOI(POI):
+    get location of POI
+    move to that POI
+
+    take picture using downward-facing camera (use live-feed)
+
+    if tracking pattern located: # Any of the aruco markers detected
+        //enter phase 3 (terminal descent)
+    else:
+        mark POI as visited
+
+fallbackSearch():
+    # Not the exact algorithm described, but bear with me
+    Travel in spiral-like pattern until a strong pink border has been detected
+
+terminalDescent():
+    Use precision landing code for aruco markers
+    landed = true # This will kill the while-loop in performChallenge2()
