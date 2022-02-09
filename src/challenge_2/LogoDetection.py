@@ -1,13 +1,15 @@
+from cgitb import handler
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 import cv2
+from Utils import setupLoggers
 import cv2.aruco as aruco # type: ignore
 from enum import Enum, auto
 import collections
 from dataclasses import dataclass, field
 import numpy as np
 import argparse
-
+import logging
 
 # @dataclass
 # class LogoTemplate:
@@ -69,10 +71,24 @@ def createMaskFromBoxes(rects, shape, enlargment_size):
 
     return mask
 
-@dataclass
+# @dataclass
 class LogoDetector:
     projected_markers: List[Any] = field(default_factory=list, init=False)
+
+    def __init__(self, template) -> None:
+        """
+        template: Image of logo 
+        """
+        self.logger = logging.getLogger(__name__)
+        self.template = template
+        self.template_bbox, self.template_ids, _ = findArucoMarkers(template)
+        self.logger.debug(f"Template processed. Ids: ({self.template_ids}) BBOXS: ({self.template_bbox})")
+        self.cv_board = createBoardFromTemplateImage(template)
+        self.logger.debug(f"Created OpenCV board from template")
+        pass
+
     def processFrame(self, frame_buffer: collections.deque, frame=None, frame_gray=None, debug=False) -> Tuple[bool, Any]:
+        logger = logging.getLogger("logo_detection")
         template_ids = range(5)
         frame = frame_buffer[0]["BGR"]
 
@@ -118,16 +134,21 @@ class LogoDetector:
 
 
 
-def detectLogo(img, logo_markers, markerSize = 4, totalMarkers=50, draw=True, enablePrint=False):
+def detectLogo(img, logo_markers, board, markerSize = 4, totalMarkers=50, draw=True, enablePrint=False):
+    logger = logging.getLogger(f"{__name__}")
+    # logger.debug("Testing")
     # Convert input color image into grayscale
     #TODO: Investigate adaptive thresholding
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # gray = img
     key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
     arucoDict = aruco.Dictionary_get(key)
     arucoParam = aruco.DetectorParameters_create()
     arucoParam.adaptiveThreshWinSizeMax = 13
     bboxs, ids_found, rejected = aruco.detectMarkers(img, arucoDict, parameters = arucoParam)
+    bboxs, ids_found, rejected, recovered_idx = aruco.refineDetectedMarkers(img, board, bboxs, ids_found, rejected)
+    if draw:
+        aruco.drawDetectedMarkers(img, bboxs)
     wasFound = False
     detType = DetectionInfo.NOT_FOUND
     
@@ -136,13 +157,13 @@ def detectLogo(img, logo_markers, markerSize = 4, totalMarkers=50, draw=True, en
     # aaaaa = detector.processFrame(img, bboxs, ids_found, rejected)
     # cv2.bitwise_and(img, aaaaa, dst= img)
     if ids_found is None:
-        return False, {}, detType
+        return False, {}, detType, 0
     color = np.random.randint(0,255,(100,3))
-    optflow_corners = cv2.goodFeaturesToTrack(gray, 100, 0.3, 5)
+    # optflow_corners = cv2.goodFeaturesToTrack(gray, 100, 0.3, 5)
 
-    for i, corner in enumerate(optflow_corners):
-        a,b = corner.ravel()
-        cv2.circle(img,(int(a),int(b)),5,color[i].tolist(), -1)
+    # for i, corner in enumerate(optflow_corners):
+    #     a,b = corner.ravel()
+    #     cv2.circle(img,(int(a),int(b)),5,color[i].tolist(), -1)
 
     ids_found = ids_found.flatten()
 
@@ -166,21 +187,49 @@ def detectLogo(img, logo_markers, markerSize = 4, totalMarkers=50, draw=True, en
     if len(good_ids) == 0:
         wasFound = False
 
-    return wasFound, detection_dict, detType
+    return wasFound, detection_dict, detType, len(ids_found)
+
+def createBoardFromTemplateImage(img, markerSize = 4, totalMarkers=250):
+    bboxs, ids, rejected = findArucoMarkers(img)
+    key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
+    markerDict = aruco.Dictionary_get(key)
+    
+    bn = np.array(bboxs)
+    bn = bn.squeeze()
+    bn = np.pad(bn, ((0,0), (0,0), (0, 1)), 'constant', constant_values=(123, 0))
+    logging.getLogger().debug(f"Detected bboxs from template. IDS: ({ids})   ({bn.shape}): {bn}")
+    return cv2.aruco.Board_create(bn, markerDict, ids)
+
 
 
 if __name__ == "__main__":
+    setupLoggers(filename='logo_detect_test')
+
+    # create logger
+    logger = logging.getLogger(__name__)
+    # logger.setLevel(logging.DEBUG)
+    # import logging.handlers
+    # handler = logging.handlers.RotatingFileHandler('logs/logo_detect_test.log', backupCount=10)
+    # # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # formatter = logging.Formatter('%(asctime)s - %(levelname)s::%(name)s - %(filename)s::%(funcName)s::%(lineno)d - %(message)s')
+    # handler.setFormatter(formatter)
+    # logger.addHandler(handler)
+    # handler.doRollover()
+    
     parser = argparse.ArgumentParser(description="Test logo detection")
     # parser.add_argument('video_input_path', default="rtsp://192.168.137.234:8080/video/h264", nargs='?')
-    parser.add_argument('video_input_path', default="mavic_test_11_12_closeup.mp4", nargs='?')
-    parser.add_argument('template', default="logo_template_2.png",  nargs='?')
+    parser.add_argument('--video', default="mavic_test_11_12_closeup.mp4", nargs='?')
+    parser.add_argument('--template', default="logo_template_2.png",  nargs='?')
     args = parser.parse_args()
 
+
+    logger.debug(f"Loading template image {args.template}")
     template_image = cv2.imread(args.template)
+    board = createBoardFromTemplateImage(template_image)
     temp_dict, temp_center = template_from_image(template_image)
     print(f"Looking for {list(temp_dict.keys())}")
-    marker_ids = range(5)
-    cap = cv2.VideoCapture(args.video_input_path)
+    marker_ids = range(4)
+    cap = cv2.VideoCapture(args.video)
     text_org = (50, 100)
     font = cv2.FONT_HERSHEY_SIMPLEX
 
@@ -189,7 +238,7 @@ if __name__ == "__main__":
 
     while True:
         success, img = cap.read()
-        logo_detected, det_dict, detType = detectLogo(img, marker_ids)
+        logo_detected, det_dict, detType, num_found = detectLogo(img, marker_ids, board)
         if logo_detected:
             size = img.shape[0:1]
             h_mat = comp_homograph(det_dict, temp_dict)
@@ -200,7 +249,7 @@ if __name__ == "__main__":
 
             cv2.putText(img, f"Logo Found: {logo_detected} // IDs Detected: {det_dict.keys()}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
         else:
-            cv2.putText(img, f"Logo Found: {logo_detected}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(img, f"Logo Found: {logo_detected} // IDs Detected ({num_found}): {det_dict.keys()}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
         cv2.imshow('img', img)
 
         # mask = detector.processFrame(img)

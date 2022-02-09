@@ -1,8 +1,12 @@
 import argparse
+from itertools import count
 from typing import Any, Dict, Tuple
 import cv2
 from dataclasses import dataclass, field
 import functools
+
+import numpy as np
+from Utils import setupLoggers
 # from challenge_2.VisionTests import maskHue
 from cv2.legacy import TrackerMOSSE_create #type: ignore
 
@@ -53,7 +57,7 @@ class Hue_Detector_Opts:
     tolerance: float = 0.10
     opening_size: int = 10
     value_range: Tuple[float, float] = (0.5*255, 255)
-    saturation_range: Tuple[float, float] = (0.10*255, 255)
+    saturation_range: Tuple[float, float] = (0.1*255, 255)
 
     def hueInHSV(self):
         return (self.target_hue / 360)*255
@@ -76,6 +80,10 @@ def geoRegister(pix_coords, vehicle_info):
     return [1.0, 1.0]
 
 
+def drawCountorAABBox(cnt, img, color=(0,255,0)):
+    x,y,w,h = cv2.boundingRect(cnt)
+    cv2.rectangle(img,(x,y),(x+w,y+h),(0,255,0), 2)
+
 @dataclass
 class POI_Tracker:
     new_poi_found: bool = field(default=False, init=False)
@@ -87,7 +95,7 @@ class POI_Tracker:
     flow_feature_params: Dict = field(default_factory=lambda: DefaultVars.optical_flow_feature_params.copy())
     flow_params: Dict = field(default_factory=lambda: DefaultVars.optical_flow_params.copy())
     
-    def processFrame(self, vehicle, frame_bgr, frame_hsv=None) -> Tuple[bool, Any]:
+    def processFrame(self, vehicle, frame_bgr, frame_hsv=None):# -> Tuple[bool, Any]:
         """Process a frame of HSV video and update POI information/detect new POIs
         :param frame: Captured frame in BGR format
         :param vehicle: Dronekit vehicle object
@@ -110,10 +118,12 @@ class POI_Tracker:
         draw_contours = True
         in_range = False
         poi_optical_tracking = False
+        occupied_ratio_test = True
+        minOccupancyRatio = 0.7
 
         if in_range:
             lower, upper = self.hue_detect_params.asUpperLower()
-            mask = cv2.inRange(frame_hsv, lower, upper)
+            mask = cv2.inRange(frame_hsv, np.array(list(lower)), np.array(list(upper)))
 
         if enable_sat:
             _, sat_mask = cv2.threshold(frame_hsv[:,:,1], self.hue_detect_params.saturation_range[1], 0, cv2.THRESH_TOZERO_INV)
@@ -127,14 +137,30 @@ class POI_Tracker:
 
         # num_regions, labels = cv2.connectedComponents(mask)
 
+        def rotatedRectArea(rrdat):
+            _, (w,h), _ = rrdat
+            return w*h
+
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        contours = [cont for cont in contours if cv2.contourArea(cont) > self.minimum_area]
+        if occupied_ratio_test:
+            contours = [c for c in contours if cv2.contourArea(c) > self.minimum_area and cv2.contourArea(c)/rotatedRectArea(cv2.minAreaRect(c)) >= minOccupancyRatio]
+        else:
+            contours = [cont for cont in contours if cv2.contourArea(cont) > self.minimum_area]
         
+        detected_poi_bboxes = [cv2.boundingRect(x) for x in contours]
+        
+        centroids = np.zeros( (len(contours), 2))
+        for i, cnt in enumerate(contours):
+            cm = cv2.moments(cnt)
+            centroids[i, 0] = int(cm['m10']/cm['m00'])
+            centroids[i, 1] = int(cm['m01']/cm['m00'])
+
         if draw_contours:
-             cv2.drawContours(frame_bgr, contours, -1, (255, 255, 0), 2)
+            cv2.drawContours(frame_bgr, contours, -1, (255, 255, 0), 2)
+            for c in contours:
+                drawCountorAABBox(c, frame_bgr)
 
         if poi_optical_tracking:
-            detected_poi_bboxes = [cv2.boundingRect(x) for x in contours]
             
             new_bboxes = {}
             failed_tracker_ids = [];
@@ -163,7 +189,7 @@ class POI_Tracker:
                 
         #TODO: Georegistration
             
-        return True, None
+        return len(detected_poi_bboxes)>0, centroids, detected_poi_bboxes
 
     def getUnvisitedPOIs(self):
         return [];
@@ -174,17 +200,23 @@ class POI_Tracker:
 
 
 if __name__ == "__main__":
+    setupLoggers(filename="poi_detect_test")
     parser = argparse.ArgumentParser(description="Test Far Field Logo detection")
     parser.add_argument('--video', default="2021_11_12_10_58_15.mp4", nargs='?')
     # parser.add_argument('template', default="logo_template_2.png",  nargs='?')
     args = parser.parse_args()
+    draw_centroids = True
 
     cap = cv2.VideoCapture(args.video)
     poi_track = POI_Tracker()
 
     while True:
         success, img = cap.read()
-        poi_track.processFrame(None, img)
+        new_pois_found, centroids, bboxes = poi_track.processFrame(None, img)
+        if draw_centroids:
+            # print(f"Centroids: {centroids}")
+            for i in range(centroids.shape[0]):
+                cv2.circle(	img, centroids[i,:].astype(np.uintc), 10, (0,0,255) ,2 )
 
         cv2.imshow('img', img)
 
