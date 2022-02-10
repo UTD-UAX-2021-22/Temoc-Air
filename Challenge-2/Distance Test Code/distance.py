@@ -1,8 +1,10 @@
+from turtle import distance
 from imutils import paths
 import numpy as np
 import imutils
 import cv2
 
+cap = cv2.VideoCapture(1)
 KNOWN_DISTANCE = 24.0
 KNOWN_WIDTH = 11.0
 
@@ -20,12 +22,33 @@ def find_marker(image):
 def distance_to_camera(knownWidth, focalLength, perWidth):
     return (knownWidth * focalLength) / perWidth
 
-image = cv2.imread("images/test.jpg")
+# This sets the base case. Test.png should be a picture with a known distance, and width
+# These values are used to determine focallength which is used for all distance estimations.
+image = cv2.imread("images/test.png")
 marker = find_marker(image)
 focalLength = (marker[1][0] * KNOWN_DISTANCE)/KNOWN_WIDTH
 
-for imagePath in sorted(paths.list_images("images")):
-    image = cv2.imread(imagePath)
+#for imagePath in sorted(paths.list_images("images")):
+#    image = cv2.imread(imagePath)
+#    marker = find_marker(image)
+#    inches = distance_to_camera(KNOWN_WIDTH, focalLength, marker[1][0])
+#
+#    #draw bounding box
+#    box = cv2.cv.BoxPoints(marker) if imutils.is_cv2() else cv2.boxPoints(marker)
+#    box = np.int0(box)
+#    cv2.drawContours(image, [box], -1, (0,255,0), 2)
+#    cv2.putText(image, "%.2fft" % (inches/12),
+#    (image.shape[1] -200, image.shape[0] -20), cv2.FONT_HERSHEY_SIMPLEX,
+#    2.0, (0,255,0), 3)
+#    cv2.imshow("image", image)
+#    cv2.waitKey(0)
+
+while True:
+    #Live video stream
+    ret, frame = cap.read()
+
+    # Calculates the distance for each frame
+    image = frame
     marker = find_marker(image)
     inches = distance_to_camera(KNOWN_WIDTH, focalLength, marker[1][0])
 
@@ -36,5 +59,11 @@ for imagePath in sorted(paths.list_images("images")):
     cv2.putText(image, "%.2fft" % (inches/12),
     (image.shape[1] -200, image.shape[0] -20), cv2.FONT_HERSHEY_SIMPLEX,
     2.0, (0,255,0), 3)
+
+    # Show frame with bounding box
     cv2.imshow("image", image)
-    cv2.waitKey(0)
+
+    # Quits if q is pressed
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
+        break
