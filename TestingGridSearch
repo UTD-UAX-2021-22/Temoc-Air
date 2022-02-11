@@ -223,7 +223,7 @@ def SetConditionYaw(heading, relative = False):
     if(heading >=0):
         turn = 1 # 1 is to turn clockwise
     else:
-        turn = 0
+        turn = -1
         heading = heading * (-1)
     msg = vehicle.message_factory.command_long_encode(
         0, 0,    # target system, target component
@@ -256,24 +256,33 @@ def SetROI(loc):
 def HowManyRuns(sidelineOffset, offsetOfRun, widthOfField = 160): #distances in feet
     runOffsetArr = []
     maxDistance = widthOfField - sidelineOffset
-    runs = maxDistance / offsetOfRun 
+    runs = int(maxDistance / offsetOfRun )
     newRun = maxDistance % offsetOfRun
     for x in range(0, runs):
         converted = (FeetToMeters(offsetOfRun))
         runOffsetArr.append(converted)
     if(newRun >=  (offsetOfRun/2)):
-        offsetOfRun.append(FeetToMeters(newRun - 2)) 
+        runOffsetArr.append(FeetToMeters(newRun - 2)) 
         return runOffsetArr #returns array of run offset in meters
     else:
         return runOffsetArr
+        
+def IsMoving(dist):
+	while True: #vehicle.mode.name == "GUIDED":
+	        distanceTraveled = GetDistanceInMeters(vehicle.location.global_relative_frame, homeLocation)
+	        print(f"Distance traveled: {distanceTraveled}")
+	        if distanceTraveled >= FeetToMeters(dist) * .99999:
+	            print("Target Reached")
+	            print(f"Final distance traveled: {distanceTraveled}")
+	            break
+	        time.sleep(1)
 
 
 
-"""
-----------------------
--------- Main --------
-----------------------
-"""
+#----------------------
+#-------- Main --------
+#----------------------
+
 # Connect to vehicle UDP endpoint for simulator
 vehicle = connect('127.0.0.1:14550', wait_ready=True)
 # Connect to vehicle over com port serial
@@ -328,8 +337,8 @@ elif curMode == "BASIC_TEST":
     vehicle.close()
 elif curMode == "CHALLENGE2_GRID_SEARCH":
     lengthOfRuns = 145 #feet
-    sideOffset = 6
-    runOffset = 5
+    sideOffset = 89
+    runOffset = 20
     widthOfField = 160
     cWise = True 
 
@@ -339,30 +348,54 @@ elif curMode == "CHALLENGE2_GRID_SEARCH":
         cWise = False
     ArmDrone()
     TakeOffDrone(FeetToMeters(15))
-    vehicle.airspeed = 5
+    vehicle.airspeed = 3
     homeLocation = vehicle.location.global_relative_frame
     runsArr = HowManyRuns(sideOffset, runOffset)
+    print("Number of runs!!")
+    print(len(runsArr))
+    GoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0)
+    IsMoving(lengthOfRuns)
     for running in runsArr:
-        FrameVelocityControl(FeetToMeters(145), 0, 0 )
+    	#distBtwn = running
+        #GoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0)
+        #time.sleep(10)
+        dist = running
         if(cWise):
+            print("cWise new")
             SetConditionYaw(90, True)
-            FrameVelocityControl(FeetToMeters(running), 0, 0)
+            time.sleep(5)
+            #GoToTargetBody(FeetToMeters(5), 0, 0)
+            GoToTargetBody(dist, 0, 0)
+            IsMoving(lengthOfRuns) 
+            time.sleep(5)
             PrintTelemetry()
             SetConditionYaw(90, True)
+            time.sleep(5)
             cWise = False
+            GoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0)
+            IsMoving(lengthOfRuns)
+            time.sleep(10)
         else:
+          
+            
+            
+            
             SetConditionYaw(-90, True)
-            FrameVelocityControl(FeetToMeters(running), 0, 0)
+            time.sleep(10)
+            GoToTargetBody(dist, 0, 0) 
+            time.sleep(10)
             PrintTelemetry()
             SetConditionYaw(-90, True)
+            time.sleep(10)
             cWise = True
+            GoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0)
+            time.sleep(10)
+            
+    	
     LandDrone()
-    Vehicle.close()
+    vehicle.close()
 
 
 
     
-        #run from bottom 
-
-
-"""
+      
