@@ -53,87 +53,6 @@ def findArucoMarkers(img, markerSize = 4, totalMarkers=250, detectorParams=aruco
     return bboxs, ids, rejected
 
 
-class DetectionInfo(Enum):
-    DUPLICATE_MARKERS = auto()
-    NOT_FOUND = auto()
-    NORMAL = auto()
-
-def createMaskFromBoxes(rects, shape, enlargment_size):
-    enlarged_rects = [(center, (w + enlargment_size, h + enlargment_size), angle) for center, (w,h), angle in rects]
-
-    color = (255, 255, 255)
-    mask = np.zeros(shape, dtype="uint8")
-
-    for rect in enlarged_rects:
-        box = cv2.boxPoints(rect)
-        box = np.int0(box)
-        cv2.drawContours(mask,[box],0,color,-1)
-
-    return mask
-
-# @dataclass
-class LogoDetector:
-    projected_markers: List[Any] = field(default_factory=list, init=False)
-
-    def __init__(self, template) -> None:
-        """
-        template: Image of logo 
-        """
-        self.logger = logging.getLogger(__name__)
-        self.template = template
-        self.template_bbox, self.template_ids, _ = findArucoMarkers(template)
-        self.logger.debug(f"Template processed. Ids: ({self.template_ids}) BBOXS: ({self.template_bbox})")
-        self.cv_board = createBoardFromTemplateImage(template)
-        self.logger.debug(f"Created OpenCV board from template")
-        pass
-
-    def processFrame(self, frame_buffer: collections.deque, frame=None, frame_gray=None, debug=False) -> Tuple[bool, Any]:
-        logger = logging.getLogger("logo_detection")
-        template_ids = range(5)
-        frame = frame_buffer[0]["BGR"]
-
-        original_bboxs, ids_found, rejected = findArucoMarkers(frame)
-        if original_bboxs is None or ids_found is None:
-            return False, None
-
-        lk_params = dict( winSize  = (15,15), maxLevel = 2, criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-
-
-        for id, original_points, prior_frame_pts in self.projected_markers:
-            new_points, stat, _ = cv2.calcOpticalFlowPyrLK(frame_buffer[1]["GRAY"], frame_buffer[0]["GRAY"], prior_frame_pts, None, **lk_params)
-            new_orig = original_points[stat==1]
-            new_points = new_points[stat==1]
-            
-
-        ids_found = ids_found.flatten()
-
-        bboxs: List[Tuple[int, np.ndarray]] = [(id, box) for box, id in zip(original_bboxs, ids_found) if id in template_ids]
-
-        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame_gray is None else frame_gray
-
-        aruco_rects = [cv2.minAreaRect(bbox.reshape(4,2)) for _, bbox in bboxs]
-
-        mask = createMaskFromBoxes(aruco_rects, frame.shape[:2], 20)
-
-        masks = [createMaskFromBoxes(rec,  frame.shape[:2], 20) for rec in aruco_rects]
-
-
-
-        
-        optflow_corners = cv2.goodFeaturesToTrack(frame_gray, 20, 0.3, 5, mask=mask)
-
-        
-
-        return False, None
-
-
-
-
-        
-
-
-
-
 def detectLogo(img, logo_markers, board, markerSize = 4, totalMarkers=50, draw=True, enablePrint=False):
     logger = logging.getLogger(f"{__name__}")
     # logger.debug("Testing")
@@ -188,6 +107,54 @@ def detectLogo(img, logo_markers, board, markerSize = 4, totalMarkers=50, draw=T
         wasFound = False
 
     return wasFound, detection_dict, detType, len(ids_found)
+
+
+class DetectionInfo(Enum):
+    DUPLICATE_MARKERS = auto()
+    NOT_FOUND = auto()
+    NORMAL = auto()
+
+def createMaskFromBoxes(rects, shape, enlargment_size):
+    enlarged_rects = [(center, (w + enlargment_size, h + enlargment_size), angle) for center, (w,h), angle in rects]
+
+    color = (255, 255, 255)
+    mask = np.zeros(shape, dtype="uint8")
+
+    for rect in enlarged_rects:
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        cv2.drawContours(mask,[box],0,color,-1)
+
+    return mask
+
+# @dataclass
+class LogoDetector:
+    projected_markers: List[Any] = field(default_factory=list, init=False)
+
+    def __init__(self, template) -> None:
+        """
+        template: Image of logo 
+        """
+        self.logger = logging.getLogger(__name__)
+        self.template = template
+        self.template_bbox, self.template_ids, _ = findArucoMarkers(template)
+        self.homography_dict, self.homography_center = template_from_image(template) 
+        self.logger.debug(f"Template processed. Ids: ({self.template_ids}) BBOXS: ({self.template_bbox})")
+        self.cv_board = createBoardFromTemplateImage(template)
+        self.logger.debug(f"Created OpenCV board from template")
+        pass
+
+    def processFrame(self, vehicle, frame_bgr) -> Tuple[bool, Any]:
+        logo_detected, det_dict, detType, num_found = detectLogo(frame_bgr, self.cv_board, draw=False, totalMarkers=250)
+        if logo_detected:
+            h_mat = comp_homograph(det_dict, self.homography_dict)
+            # print(np.atleast_2d(np.array(temp_center)))
+            new_center: np.ndarray = cv2.perspectiveTransform(np.atleast_3d(np.array(self.homography_center, dtype='float32')).reshape(-1,1,2), h_mat)
+            return True, new_center
+        else:
+            return False, np.array([0,0])
+        
+
 
 def createBoardFromTemplateImage(img, markerSize = 4, totalMarkers=250):
     bboxs, ids, rejected = findArucoMarkers(img)
