@@ -1,11 +1,15 @@
 from dataclasses import dataclass
+import json
 import logging
 import math
 from pathlib import Path
+from typing import List, Tuple
 import cv2
 import utm
 import numpy as np
-from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Rotation
+from pydantic import BaseModel
+
 
 def setupLoggers(filename='test_log'):
     import logging
@@ -50,8 +54,58 @@ def get_line_plane_intercepts(plane_origin, plane_normal, line_origins, line_dir
 
 def attitudeToRotator(attitude, att_init=None):
     yaw = attitude.yaw if att_init is None else attitude.yaw - att_init.yaw
-    return R.from_euler('zyx', [-yaw, attitude.pitch, attitude.roll])
+    return Rotation.from_euler('ZYX', [-yaw, -attitude.pitch, -attitude.roll])
 
+def pixCoordToRot(pix_coords, hfov, vfov, hres, vres) -> Rotation:
+    px_angle = pixCoordToAngle(pix_coords, hfov, vfov, hres, vres)
+    return Rotation.from_euler('zyx', [px_angle[0], px_angle[1], 0], degrees=True)
+
+def pixCoordToWorldPosition(vehicle, camera, pix_coords, att_init=None):
+    x, y, *_ = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
+    veh_pos = np.array([x, y, vehicle.location.global_relative_frame.alt])
+    pix_rot = pixCoordToRot(pix_coords,  camera.hfov, camera.vfov, camera.resolution[0], camera.resolution[1])
+    cam_rot = Rotation.from_euler('ZYX', camera.rotation, degrees=True)
+    vehicle_rot = attitudeToRotator(vehicle.attitude, att_init=att_init)
+    cam_pos = vehicle_rot.apply(np.asarray(camera.position)) + veh_pos
+    logging.getLogger(__name__).debug(f"Rotators: {vehicle_rot.as_euler('ZYX', degrees=True)} -- {cam_rot.as_euler('ZYX', degrees=True)} -- {pix_rot.as_euler('ZYX', degrees=True)}")
+    total_rot = vehicle_rot * cam_rot * pix_rot
+    ray = total_rot.apply(np.array([1, 0, 0]))
+    logging.getLogger(__name__).debug(f"Ray: {ray}")
+    return get_line_plane_intercepts( np.array([0,0,0]), np.array([0,0, 1]), cam_pos, ray)
+
+
+
+
+
+
+class CameraInfo(BaseModel):
+    name: str = "Dummy Camera"
+    id: int = -1
+    position: List[float] = [0.0, 0.0, 0.0]
+    rotation: List[float] = [0.0, 0.0, 0.0]
+    hfov: float = 60
+    vfov: float = 60
+    resolution: Tuple[float, float] = (200, 200)
+
+class VehicleInfo(BaseModel):
+    cameras: List[CameraInfo] = [CameraInfo(name="Dummy Camera 1"), CameraInfo(name="Dummy Camera 2")]
+
+class DummyAttitude(BaseModel):
+    pitch: float = 0
+    roll: float = 0
+    yaw: float = 0
+
+class DummyGPSCoords(BaseModel):
+    lat: float = 32.729018289461976
+    lon: float = -97.12642125790629
+    alt: float = 10
+
+class DummyLocation(BaseModel):
+    global_relative_frame: DummyGPSCoords = DummyGPSCoords()
+
+class DummyVehicle(BaseModel):
+    location: DummyLocation = DummyLocation()
+    attitude: DummyAttitude = DummyAttitude()
 
 @dataclass
 class DummyAtt:
@@ -60,11 +114,25 @@ class DummyAtt:
     yaw: float
 
 if __name__ == "__main__":
+    setupLoggers(filename="util_log")
     vec = np.array([1, 0, 0])
     att = DummyAtt(0,0,math.pi/2)
     res = attitudeToRotator(att).apply(vec)
     print(res)
     print(utm.from_latlon(32.72881384085485, -97.12668390777232))
     print(utm.from_latlon(32.728810921372826, -97.12616281223721))
+
+    t = VehicleInfo()
+    print(t.json())
+
+    # with open('vehicle_info.json') as vf:
+    #     t = VehicleInfo(**json.load(vf))
+    print(t)
+
+    test_pos = DummyVehicle(attitude=DummyAttitude(yaw=math.pi/2, pitch=-math.pi/4))
+    test_cam = CameraInfo(rotation=[0,-90,0], hfov=90, vfov=90)
+    print("Raycast Tests")
+    print(utm.from_latlon(32.729018289461976, -97.12642125790629))
+    print(pixCoordToWorldPosition(test_pos, test_cam, [100,0]))
     # pixc = np.asarray([[100, 50], [0, 0], [200, 100]])
     # print(f"Result: {pixCoordToAngle(pixc, 45, 30, 200, 100)}")
