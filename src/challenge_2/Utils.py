@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import logging
 import math
+from pathlib import Path
 import cv2
 import utm
 import numpy as np
@@ -9,6 +10,7 @@ from scipy.spatial.transform import Rotation as R
 def setupLoggers(filename='test_log'):
     import logging
     logger = logging.getLogger()
+    Path("logs").mkdir(parents=True, exist_ok=True)
     logger.setLevel(logging.DEBUG)
     import logging.handlers
     handler = logging.handlers.RotatingFileHandler(f"logs/{filename}.log", backupCount=10)
