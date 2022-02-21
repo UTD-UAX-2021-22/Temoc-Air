@@ -7,6 +7,7 @@ import time
 import socket
 import math
 import argparse  # Allows to input vals from command line to use them in python
+import asyncio
 
 def ConnectToCopter():
     parser = argparse.ArgumentParser(description='commands')
@@ -276,6 +277,12 @@ def IsMoving(dist):
 	            print(f"Final distance traveled: {distanceTraveled}")
 	            break
 	        time.sleep(1)
+	        
+async def asyncGoToTargetBody(north, east, down):
+	print("Moving to Destination")
+	GoToTargetBody(north, east, down)
+	await asyncio.sleep(10)
+	print("scanning")
 
 
 
@@ -365,14 +372,14 @@ elif curMode == "CHALLENGE2_GRID_SEARCH":
             SetConditionYaw(90, True)
             time.sleep(5)
             #GoToTargetBody(FeetToMeters(5), 0, 0)
-            GoToTargetBody(dist, 0, 0)
+            asyncio.run(asyncGoToTargetBody(dist, 0, 0))
             IsMoving(lengthOfRuns) 
             time.sleep(5)
             PrintTelemetry()
             SetConditionYaw(90, True)
             time.sleep(5)
             cWise = False
-            GoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0)
+            asyncio.run(asyncGoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0))
             IsMoving(lengthOfRuns)
             time.sleep(10)
         else:
@@ -382,13 +389,13 @@ elif curMode == "CHALLENGE2_GRID_SEARCH":
             
             SetConditionYaw(-90, True)
             time.sleep(10)
-            GoToTargetBody(dist, 0, 0) 
+            asyncio.run(asyncGoToTargetBody(dist, 0, 0)) 
             time.sleep(10)
             PrintTelemetry()
             SetConditionYaw(-90, True)
             time.sleep(10)
             cWise = True
-            GoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0)
+            asyncio.run(asyncGoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0))
             time.sleep(10)
             
     	
@@ -396,6 +403,3 @@ elif curMode == "CHALLENGE2_GRID_SEARCH":
     vehicle.close()
 
 
-
-    
-      
