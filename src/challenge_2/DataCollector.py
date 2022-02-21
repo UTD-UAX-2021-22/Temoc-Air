@@ -1,8 +1,11 @@
 import json
+import logging
+import time
 import cv2
 import argparse
-from unicodedata import name
 from dronekit import connect, VehicleMode, LocationGlobalRelative, APIException
+
+from Utils import setupLoggers
 
 def tryMakeInt(s):
     try:
@@ -11,6 +14,8 @@ def tryMakeInt(s):
         return s
 
 if __name__ == "__main__":
+    setupLoggers(filename="data_collector")
+    logger = logging.getLogger(__name__)
     parser = argparse.ArgumentParser(description="Data Collector")
     parser.add_argument('--cam', default=1, nargs='?')
     parser.add_argument('--output', default="flight_video.avi")
@@ -29,14 +34,24 @@ if __name__ == "__main__":
     else:
         size = tuple(args.size)
 
+    logger.info(f"Output Video Size: {size}")
     print(f"Output Video Size: {size}")
 
+    logger.info("Created video writer")
     video_writer = cv2.VideoWriter(args.output, cv2.VideoWriter_fourcc(*args.codec), 30, size)
     
+
+    if args.connect_drone:
+        logger.info("Connecting to drone")
     vehicle = connect('127.0.0.1:14550', wait_ready=True) if args.connect_drone else None
+    
+    
     frame_number = 0
+
     with open('flight_data_log.jsonl', 'w') as file:
         while True:
+            frame_start = time.perf_counter()
+            
             success, img = cap.read()
             if not success:
                 break
@@ -58,6 +73,7 @@ if __name__ == "__main__":
             # size = (426, 240)
             video_writer.write(cv2.resize(img, size, interpolation=cv2.INTER_AREA))
             file.write(f"{json.dumps(frame_log)}\n")
+            logger.debug(f"Frame {frame_number} took {(time.perf_counter() -  frame_start)*1000}")
             frame_number += 1
 
         #arm and takeoff the drone
