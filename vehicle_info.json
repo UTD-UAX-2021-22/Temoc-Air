@@ -1,0 +1,21 @@
+{
+    "cameras": [
+      {
+        "name": "Dummy Camera 1",
+        "id": -1,
+        "position": [0, 0, 0],
+        "rotation": [0, -90, 0],
+        "hfov": 60,
+        "vfov": 60,
+        "resolution": [400, 400]
+      },
+      {
+        "name": "Dummy Camera 2",
+        "id": -1,
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "hfov": 60,
+        "vfov": 60
+      }
+    ]
+  }

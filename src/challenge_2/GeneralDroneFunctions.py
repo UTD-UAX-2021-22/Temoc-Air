@@ -2,7 +2,7 @@
 	Please stick to the syntax conventions when adding new functions
 	Uncomment the main at the bottom to test anything
 """
-from dronekit import connect, mavutil, VehicleMode, LocationGlobalRelative, APIException
+from dronekit import connect, mavutil, VehicleMode, LocationGlobalRelative, APIException, Vehicle
 import time
 import socket
 import math
@@ -202,6 +202,42 @@ def GoToTargetBody(vehicle, north, east, down):
 	# send command to vehicle
     vehicle.send_mavlink(msg)
 
+def GoToGlobal(vehicle: Vehicle, coords, alt=7.62):
+    coords = coords.flatten()
+    msg = vehicle.message_factory.set_position_target_global_int(
+        0,  # time_boot_ms (not used)
+        0, 0,  # target system, target component
+        mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,  # frame
+        0b110111111000 ,  # type_mask (only positions enabled)
+        coords[0]*10_000_000, coords[0]*10_000_000, alt,
+        0, 0, 0,  # x, y, z velocity in m/s  (not used)
+        0, 0, 0,  # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
+        0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
+    # msg = vehicle.message_factory.set_position_target_local_ned_encode(
+
+	# send command to vehicle
+    vehicle.send_mavlink(msg)
+
+def MoveRelative(vehicle, pos):
+    """
+        Send command to request the vehicle fly to a specified
+        location in the North, East, Down frame of the drone's body. So north is direction that
+        drone is facing.
+    """
+    pos = pos.flatten()
+    msg = vehicle.message_factory.set_position_target_local_ned_encode(
+        0,  # time_boot_ms (not used)
+        0, 0,  # target system, target component
+        mavutil.mavlink.MAV_FRAME_BODY_NED,  # frame
+        0b110111111000,  # type_mask (only positions enabled)
+        pos[0], pos[1], pos[2],
+        0, 0, 0,  # x, y, z velocity in m/s  (not used)
+        0, 0, 0,  # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
+        0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
+	# send command to vehicle
+    vehicle.send_mavlink(msg)
+
+
 def GetDistanceInMeters(vehicle, aLoc1, aLoc2):
     """ Returns the ground distance in metres between two LocationGlobal objects.
         This method is an approximation, and will not be accurate over large distances and close to the
@@ -218,7 +254,7 @@ def YardsToMeters(yards):
 def FeetToMeters(feet):
 	return feet * 0.3048
 
-def SetConditionYaw(heading, relative = False):
+def SetConditionYaw(vehicle, heading, relative = False, speed = 60):
     """ The vehicle “yaw” is the direction that the vehicle is facing in the horizontal plane. On Copter this yaw need not be the direction of travel (though it is by default).
     """
     if relative:
@@ -231,8 +267,8 @@ def SetConditionYaw(heading, relative = False):
         mavutil.mavlink.MAV_CMD_CONDITION_YAW, #command
         0, #confirmation
         heading,    # param 1, yaw in degrees
-        0,          # param 2, yaw speed deg/s
-        1,          # param 3, direction -1 ccw, 1 cw
+        speed,          # param 2, yaw speed deg/s
+        1 if heading >= 0 else -1,          # param 3, direction -1 ccw, 1 cw
         relativeToDirOfTravel, # param 4, relative offset 1, absolute angle 0
         0, 0, 0)    # param 5 ~ 7 not used
     # send command to vehicle

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import argparse
 import logging
-
+import time
 # @dataclass
 # class LogoTemplate:
 
@@ -150,7 +150,7 @@ class LogoDetector:
             h_mat = comp_homograph(det_dict, self.homography_dict)
             # print(np.atleast_2d(np.array(temp_center)))
             new_center: np.ndarray = cv2.perspectiveTransform(np.atleast_3d(np.array(self.homography_center, dtype='float32')).reshape(-1,1,2), h_mat)
-            return True, new_center
+            return True, new_center.flatten()
         else:
             return False, np.array([0,0])
         
@@ -202,6 +202,7 @@ if __name__ == "__main__":
 
     # detector = LogoDetector()
     # detector.processFrame(template_image)
+    frame_number = 0
 
     while True:
         success, img = cap.read()
@@ -226,6 +227,8 @@ if __name__ == "__main__":
             # cv2.imshow('img', mask)
         # print(img)
         k = cv2.waitKey(1) & 0xff
+        logger.debug(f"Frame {frame_number} took {(time.perf_counter() -  frame_start)*1000}")
+        frame_number += 1
 
         if k == 27:
             break

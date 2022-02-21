@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-from Utils import setupLoggers, contourCentroid
+from Utils import setupLoggers, contourCentroid, calculateVisitPath
 import cv2
 import utm
 
@@ -24,6 +24,14 @@ class GeoTracker:
         self.threshold = threshold
         self.poi_counter = 0
         self.prior_poi = {}
+        x_vales = np.arange(resolution[0])
+        y_vals = np.arange(resolution[1])
+        self.coord_grid = np.zeros((resolution[0], resolution[1], 2))
+        for xi in range(resolution[0]):
+            for yi in range(resolution[1]):
+                self.coord_grid[xi, yi, 0] = xi
+                self.coord_grid[xi, yi, 1] = yi
+        logging.getLogger(__name__).debug(f"Coord Grid:{self.coord_grid}")
         pass
 
     def reportPoi(self, position):
@@ -32,11 +40,13 @@ class GeoTracker:
         logging.getLogger(__name__).debug(f"Adding report at {pos_aug}")
         pp = pos_aug @ self.tf_mat
         logging.getLogger(__name__).debug(f"Adding report at translated {pp}")
-
-        # print(pp)
+        
+        # print(f"PP: {pp}")
         pp = pp.astype(int)
-        if 0 <= pp[0,0] < self.resolution[0] and 0 <= pp[0,1] < self.resolution[1]:
-            self.poi_map[pp[0, 1], pp[0, 0]] += 1
+        for row in pp:
+            # print(f"Row: {row}")
+            if 0 <= row[0] < self.resolution[0] and 0 <= row[1] < self.resolution[1]:
+                self.poi_map[row[1], row[0]] += 1
 
 
     def getGrayscaleMap(self):
@@ -61,10 +71,12 @@ class GeoTracker:
                 for i in assigned_ids:
                     if i != id_to_keep:
                         del self.poi_map[i]
-                
-        
-        
 
+    def getPOIs(self):
+        mask = self.poi_map > self.threshold
+        indexs = self.coord_grid[mask]
+        indexs = np.pad(indexs, ((0,0), (0,1)), 'constant', constant_values=(0, 1))
+        return (indexs @ self.inv_tf_mat)[:,1:2]
 
 
 if __name__ == "__main__":
@@ -86,7 +98,7 @@ if __name__ == "__main__":
     ])
     coords_utm = np.zeros_like(stadium_coords)
     coords_utm[:,0], coords_utm[:,1], znum, zlet = utm.from_latlon(stadium_coords[:,0], stadium_coords[:,1])
-    tracker = GeoTracker(coords_utm, resolution=(60,60))
+    tracker = GeoTracker(coords_utm, resolution=(20,20), threshold=30)
     print("Field Corner Coordinates")
     print(coords_utm)
 
@@ -100,5 +112,8 @@ if __name__ == "__main__":
             report_point = pn + rng.normal(0, max_rdist, (1,2))
             # print(report_point)
             tracker.reportPoi(report_point)
-
+    tracker.reportPoi(np.array(actual_points))
     Image.fromarray(tracker.getGrayscaleMap(), 'L').show()
+    print(f"Reported POIs with length ({tracker.getPOIs().shape})")
+    print(tracker.getPOIs())
+    print(calculateVisitPath(tracker.getPOIs(), [0,0]))
