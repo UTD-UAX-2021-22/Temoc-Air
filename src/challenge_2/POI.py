@@ -1,5 +1,6 @@
 import argparse
 from itertools import count
+import logging
 from typing import Any, Dict, Tuple
 import cv2
 from dataclasses import dataclass, field
@@ -52,7 +53,7 @@ def bbox_area(a):
 
 @dataclass
 class Hue_Detector_Opts:
-    target_hue: float = 336.7
+    target_hue: float = 300.0
     hue_range: Tuple[float, float] = (320, 360)
     tolerance: float = 0.10
     opening_size: int = 10
@@ -100,6 +101,7 @@ class POI_Tracker:
         :param frame: Captured frame in BGR format
         :param vehicle: Dronekit vehicle object
         """
+        logger = logging.getLogger(__name__)
         if frame_hsv is None:
             frame_hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV_FULL)
 
@@ -118,7 +120,7 @@ class POI_Tracker:
         draw_contours = True
         in_range = False
         poi_optical_tracking = False
-        occupied_ratio_test = True
+        occupied_ratio_test = False
         minOccupancyRatio = 0.7
 
         if in_range:
@@ -143,8 +145,15 @@ class POI_Tracker:
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if occupied_ratio_test:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Rejected by area: {len([c for c in contours if cv2.contourArea(c) <= self.minimum_area])}")
+                logger.debug(f"Rejected by occupancy {len([c for c in contours if cv2.contourArea(c) > 0 and cv2.contourArea(c)/rotatedRectArea(cv2.minAreaRect(c)) < minOccupancyRatio])}")
+                
+
             contours = [c for c in contours if cv2.contourArea(c) > self.minimum_area and cv2.contourArea(c)/rotatedRectArea(cv2.minAreaRect(c)) >= minOccupancyRatio]
         else:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Rejected by area: {len([c for c in contours if cv2.contourArea(c) <= self.minimum_area])}")
             contours = [cont for cont in contours if cv2.contourArea(cont) > self.minimum_area]
         
         detected_poi_bboxes = [cv2.boundingRect(x) for x in contours]

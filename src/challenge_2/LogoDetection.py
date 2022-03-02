@@ -1,4 +1,3 @@
-from cgitb import handler
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 import cv2
@@ -87,6 +86,7 @@ def detectLogo(img, logo_markers, board, markerSize = 4, totalMarkers=50, draw=T
     ids_found = ids_found.flatten()
 
     id_set = set(ids_found)
+    logo_markers = logo_markers.flatten().tolist() 
     if set(logo_markers) <= id_set:
         wasFound = True
         detType = DetectionInfo.NORMAL
@@ -145,7 +145,7 @@ class LogoDetector:
         pass
 
     def processFrame(self, vehicle, frame_bgr) -> Tuple[bool, Any]:
-        logo_detected, det_dict, detType, num_found = detectLogo(frame_bgr, self.cv_board, draw=False, totalMarkers=250)
+        logo_detected, det_dict, detType, num_found = detectLogo(frame_bgr, self.template_ids, self.cv_board, draw=False, totalMarkers=250)
         if logo_detected:
             h_mat = comp_homograph(det_dict, self.homography_dict)
             # print(np.atleast_2d(np.array(temp_center)))
@@ -199,6 +199,7 @@ if __name__ == "__main__":
     cap = cv2.VideoCapture(args.video)
     text_org = (50, 100)
     font = cv2.FONT_HERSHEY_SIMPLEX
+    
 
     # detector = LogoDetector()
     # detector.processFrame(template_image)

@@ -1,3 +1,5 @@
+import json
+import time
 import numpy as np
 import logging
 from Utils import setupLoggers, contourCentroid, calculateVisitPath
@@ -11,6 +13,7 @@ class GeoTracker:
         corners: x,y coords of corners of the search area. Bottom left -> Top Left -> Top Right -> Bottom Right
         resolution
         """
+        logging.getLogger(__name__).debug("TEST")
         target_maps = np.array([[0,resolution[1],1], [0, 0, 1], [resolution[0], 0, 1], [resolution[0], resolution[1], 1]])
         logging.getLogger(__name__).debug(f"Creating Geotracker with Corners: {corners}")
         logging.getLogger(__name__).debug(f"Target map: {target_maps}")
@@ -32,11 +35,25 @@ class GeoTracker:
                 self.coord_grid[xi, yi, 0] = xi
                 self.coord_grid[xi, yi, 1] = yi
         logging.getLogger(__name__).debug(f"Coord Grid:{self.coord_grid}")
-        pass
+        
 
-    def reportPoi(self, position):
+    def reportPoi(self, position, mission_time = time.time()):
+        logger = logging.getLogger(__name__)
         self.poi_reports.append(position)
-        pos_aug = np.pad(np.atleast_2d(np.asarray(position)), ((0,0), (0,1)), 'constant', constant_values=(0,1))
+        position = np.asarray(position)
+
+        if position.shape[1] == 3:
+            position[:,2] = 1
+            pos_aug=position
+        else:
+            pos_aug = np.pad(np.atleast_2d(np.asarray(position)), ((0,0), (0,1)), 'constant', constant_values=(0,1))
+
+        if logger.isEnabledFor(logging.DEBUG):
+            with open('pd_data/geo_tracker_log.jsonl', 'a') as file:
+                for r in pos_aug:
+                    frame_log = {'lat':r[0], 'lon':r[1], 'index': len(self.poi_reports), 'time': mission_time }
+                    file.write(f"{json.dumps(frame_log)}\n")
+
         logging.getLogger(__name__).debug(f"Adding report at {pos_aug}")
         pp = pos_aug @ self.tf_mat
         logging.getLogger(__name__).debug(f"Adding report at translated {pp}")
@@ -76,7 +93,9 @@ class GeoTracker:
         mask = self.poi_map > self.threshold
         indexs = self.coord_grid[mask]
         indexs = np.pad(indexs, ((0,0), (0,1)), 'constant', constant_values=(0, 1))
-        return (indexs @ self.inv_tf_mat)[:,1:2]
+        result_coords =  (indexs @ self.inv_tf_mat)[:,0:2]
+        logging.getLogger(__name__).debug(f"POI's detected at {result_coords}")
+        return result_coords
 
 
 if __name__ == "__main__":

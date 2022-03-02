@@ -3,6 +3,7 @@ import json
 import logging
 import math
 from pathlib import Path
+import time
 from typing import List, Tuple
 import cv2
 import utm
@@ -14,7 +15,9 @@ from pydantic import BaseModel
 def setupLoggers(filename='test_log'):
     import logging
     logger = logging.getLogger()
-    Path("logs").mkdir(parents=True, exist_ok=True)
+    p = Path("logs")
+    p.mkdir(parents=True, exist_ok=True)
+    print(f"Logging Directory: {p.resolve()}")
     logger.setLevel(logging.DEBUG)
     import logging.handlers
     handler = logging.handlers.RotatingFileHandler(f"logs/{filename}.log", backupCount=10)
@@ -23,6 +26,11 @@ def setupLoggers(filename='test_log'):
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     handler.doRollover()
+
+def dumpDebugData(fname, **data):
+    if logging.getLogger("data_dumps").isEnabledFor(logging.DEBUG):
+            with open(f"pd_data/{fname}.jsonl", 'a') as file:
+                    file.write(f"{json.dumps(data)}\n")
 
 class MissionContext():
     def __init__(self, name, logger="mission_control") -> None:
@@ -40,7 +48,7 @@ class MissionContext():
 
 
 def pixCoordToAngle(pix_coords, hfov, vfov, hres, vres):
-    return (pix_coords - np.asarray([hres/2, vres/2])) * np.asarray([hfov/hres, vfov/vres])
+    return (pix_coords - np.asarray([hres/2, vres/2])) * np.asarray([-hfov/hres, -vfov/vres])
 
 def contourCentroid(cnt):
     cm = cv2.moments(cnt)
@@ -54,47 +62,53 @@ def get_line_plane_intercepts(plane_origin, plane_normal, line_origins, line_dir
 
 def attitudeToRotator(attitude, att_init=None):
     yaw = attitude.yaw if att_init is None else attitude.yaw - att_init.yaw
-    return Rotation.from_euler('ZYX', [-yaw, -attitude.pitch, -attitude.roll])
+    return Rotation.from_euler('ZYX', [-yaw, attitude.pitch, attitude.roll])
 
 def pixCoordToRot(pix_coords, hfov, vfov, hres, vres) -> Rotation:
-    px_angle = pixCoordToAngle(pix_coords, hfov, vfov, hres, vres)
-    return Rotation.from_euler('zyx', [px_angle[0], px_angle[1], 0], degrees=True)
+    px_angle = pixCoordToAngle(np.atleast_2d(pix_coords), hfov, vfov, hres, vres)
+    return Rotation.from_euler('zyx', np.pad(px_angle, ( (0,0), (0,1) ), 'constant', constant_values=(0, 0) ), degrees=True)
 
-def pixCoordToWorldPosition(vehicle, camera, pix_coords, att_init=None):
-    x, y, *_ = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
+def pixCoordToWorldPosition(vehicle, camera, pix_coords, att_init=None, mission_time=time.time()):
+    logging.getLogger(__name__).debug(f"Recieved pix2world request: {vehicle} -- {camera} -- {pix_coords} -- {att_init}")
+    x, y, zl, zn = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
+    dumpDebugData('pix2world_vpos', x=x, y=y , z=vehicle.location.global_relative_frame.alt, zl=zl, zn=zn, mission_time=mission_time)
     veh_pos = np.array([x, y, vehicle.location.global_relative_frame.alt])
     pix_rot = pixCoordToRot(pix_coords,  camera.hfov, camera.vfov, camera.resolution[0], camera.resolution[1])
-    cam_rot = Rotation.from_euler('ZYX', camera.rotation, degrees=True)
-    vehicle_rot = attitudeToRotator(vehicle.attitude, att_init=att_init)
+    cam_rot = Rotation.from_euler('ZYX', np.asarray(camera.rotation) + np.array([-90,0,0]), degrees=True)
+    # vehicle_rot = attitudeToRotator(vehicle.attitude, att_init=att_init)
+    vehicle_rot =  Rotation.from_euler('ZYX', [-vehicle.attitude.yaw, vehicle.attitude.pitch, vehicle.attitude.roll])
     cam_pos = vehicle_rot.apply(np.asarray(camera.position)) + veh_pos
     logging.getLogger(__name__).debug(f"Rotators: {vehicle_rot.as_euler('ZYX', degrees=True)} -- {cam_rot.as_euler('ZYX', degrees=True)} -- {pix_rot.as_euler('ZYX', degrees=True)}")
     total_rot = vehicle_rot * cam_rot * pix_rot
     ray = total_rot.apply(np.array([1, 0, 0]))
     logging.getLogger(__name__).debug(f"Ray: {ray}")
-    return get_line_plane_intercepts( np.array([0,0,0]), np.array([0,0, 1]), cam_pos, ray)
+    return get_line_plane_intercepts( np.array([x,y,0]), np.array([0,0, 1]), cam_pos, ray)
 
-def pixCoordToRelativePosition(vehicle, camera, pix_coords, att_init=None):
+def pixCoordToRelativePosition(vehicle, camera, pix_coords, att_init=None, mission_time=time.time()):
     # x, y, *_ = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
     x, y = (0, 0)
     veh_pos = np.array([x, y, vehicle.location.global_relative_frame.alt])
     pix_rot = pixCoordToRot(pix_coords,  camera.hfov, camera.vfov, camera.resolution[0], camera.resolution[1])
-    cam_rot = Rotation.from_euler('ZYX', camera.rotation, degrees=True)
-    vehicle_rot = Rotation.from_euler('ZYX', [0, -vehicle.attitude.pitch, -vehicle.attitude.roll])
+    cam_rot = Rotation.from_euler('ZYX', np.asarray(camera.rotation) + np.array([-90,0,0]), degrees=True)
+    vehicle_rot = Rotation.from_euler('ZYX', [0, vehicle.attitude.pitch, vehicle.attitude.roll])
     cam_pos = vehicle_rot.apply(np.asarray(camera.position)) + veh_pos
     logging.getLogger(__name__).debug(f"Rotators: {vehicle_rot.as_euler('ZYX', degrees=True)} -- {cam_rot.as_euler('ZYX', degrees=True)} -- {pix_rot.as_euler('ZYX', degrees=True)}")
     total_rot = vehicle_rot * cam_rot * pix_rot
     ray = total_rot.apply(np.array([1, 0, 0]))
     logging.getLogger(__name__).debug(f"Ray: {ray}")
+    for pxi, pxc in enumerate(np.atleast_2d(pix_coords)):
+        dumpDebugData('pix2rel_pos', veh_x=x, veh_y=y , veh_z=vehicle.location.global_relative_frame.alt, x_p=pxc.item(0), y_p=pxc.item(1), i_p=pxi, mission_time=mission_time)
     return get_line_plane_intercepts( np.array([0,0,0]), np.array([0,0, 1]), cam_pos, ray)
 
 
 def calculateVisitPath(pois, start):
     # path = [start]
+    logging.getLogger(__name__).debug(f"Requested Path from {start} to {pois}")
     path = np.zeros((pois.shape[0]+1,2))
     path[0, :] = start
 
     for i in range(1, path.shape[0]):
-        dists = np.sum(np.square(pois - start), axis=1)
+        dists = np.sum(np.square(pois - path[i-1,:]), axis=1)
         closest_point = np.argmin(dists)
         path[i, :] = pois[closest_point, :]
         pois = np.delete(pois, closest_point, 0)
@@ -102,6 +116,7 @@ def calculateVisitPath(pois, start):
 
     #TODO: Create optimized visit path
     #TODO: Perfrom any necessary lat-long conversions
+    logging.getLogger(__name__).debug(f"Path found: {path}")
     return path
 
 

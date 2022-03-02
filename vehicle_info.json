@@ -1,21 +1,22 @@
 {
     "cameras": [
       {
-        "name": "Dummy Camera 1",
+        "name": "Forward Camera",
+        "id": -1,
+        "position": [0.13, 0, 0.2],
+        "rotation": [0, -45, 0],
+        "hfov": 90,
+        "vfov": 50.625,
+        "resolution": [1280, 720]
+      },
+      {
+        "name": "Downward Camera",
         "id": -1,
         "position": [0, 0, 0],
         "rotation": [0, -90, 0],
         "hfov": 60,
-        "vfov": 60,
-        "resolution": [400, 400]
-      },
-      {
-        "name": "Dummy Camera 2",
-        "id": -1,
-        "position": [0, 0, 0],
-        "rotation": [0, 0, 0],
-        "hfov": 60,
-        "vfov": 60
+        "vfov": 33.75,
+        "resolution": [1280, 720]
       }
     ]
   }
