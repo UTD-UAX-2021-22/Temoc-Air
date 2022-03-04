@@ -24,7 +24,9 @@ import numpy as np
 import utm
 from scipy.spatial.transform import Rotation
 from PIL import Image as PilImage
+from dronekit import connect
 logo_markers = list(range(5))
+print("Imports 100%")
 
 #from cv_bridge import CvBridge
 #from sensor_msgs.msg import Image, CompressedImage
@@ -78,9 +80,10 @@ async def mainFunc():
             exit(1)
         cam_front = cam
         cam_down = cam
-
-      
-        vehicle = gd.ConnectToCopter("127.0.0.1:14550")
+        print("connecting")
+        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+        #vehicle = gd.ConnectToCopter('dev/ttyTHS2')
+        print("connected")
 
     # Yards to meters
     def y2m(v):
