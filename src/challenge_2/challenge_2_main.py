@@ -20,15 +20,15 @@ from LogoDetection import LogoDetector
 from GeoTracker import GeoTracker
 from Utils import pixCoordToRelativePosition, pixCoordToWorldPosition
 import numpy as np
-from RosAsync import AsyncSubscriber
+#from RosAsync import AsyncSubscriber
 import utm
 from scipy.spatial.transform import Rotation
 from PIL import Image as PilImage
 logo_markers = list(range(5))
 
-from cv_bridge import CvBridge
-from sensor_msgs.msg import Image, CompressedImage
-import rospy
+#from cv_bridge import CvBridge
+#from sensor_msgs.msg import Image, CompressedImage
+#import rospy
 
 
 #TODO: Make actually work
@@ -45,7 +45,7 @@ async def mainFunc():
 
     # Load vehicle information. Currently contains only camera data
     vehicle_info = VehicleInfo.parse_file("vehicle_info.json")
-    bridge = CvBridge()
+    #bridge = CvBridge()
     fcam_info = [c for c in vehicle_info.cameras if c.name == "Forward Camera"][0]
     down_cam_info = [c for c in vehicle_info.cameras if c.name == "Downward Camera"][0]
     max_frame_fails = 30
@@ -327,12 +327,12 @@ async def mainFunc():
 
 
 if __name__ == "__main__":
-    rospy.init_node('challenge2_main')
+    #rospy.init_node('challenge2_main')
     import asyncio
     loop = asyncio.get_event_loop()
     asyncio.ensure_future(mainFunc())
     loop.run_forever()
-    rospy.spin()
+    #rospy.spin()
     #loop.close()
 
 
