@@ -108,6 +108,7 @@ async def mainFunc():
     # Takeoff
     with MissionContext("Ascent"):
         gd.ArmDrone(vehicle) # Arm Vehicle
+        gd.ServoMovement(vehicle, 90-35)
         
         # Print and log telemetry
         print(f"Vehicle coords {vehicle.location.global_frame}")
@@ -150,7 +151,7 @@ async def mainFunc():
                 await asyncio.sleep(4)
 
     logo_found = False
-    ServoMovement(90)
+    gd.ServoMovement(vehicle, 90-35)
     cf =  cam_front.open(init)
     if cf != sl.ERROR_CODE.SUCCESS:
         print(repr(cf))
@@ -216,8 +217,8 @@ async def mainFunc():
         path = Utils.calculateVisitPath(geoTracker.getPOIs(), np.array([start_x, start_y]))
         logger.debug("Cam start")
         #NEED SERVO MOVEMENT HERE
-        ServoMovement(0)
-        cd ==  cam_down.open(init)
+        gd.ServoMovement(vehicle, 0)
+        cd =  cam_down.open(init)
         if cd != sl.ERROR_CODE.SUCCESS:
             print(repr(cd))
             zed.close()
