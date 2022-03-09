@@ -2,7 +2,7 @@ import argparse
 import logging
 import time
 import sys
-from challenge_2.Utils import calculateVisitPath
+from Utils import calculateVisitPath
 import pyzed.sl as sl
 
 from tqdm import tqdm
@@ -92,7 +92,7 @@ async def mainFunc():
             print(repr(status))
             exit(1)
         else:
-            print("camera Open")
+            print("Camera Open")
         cam_front = cam
         cam_down = cam
         zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
@@ -124,9 +124,7 @@ async def mainFunc():
     base_pos = np.zeros(2)
     # Takeoff
     with MissionContext("Ascent"):
-        gd.ArmDrone(vehicle) # Arm Vehicle
-        gd.ServoMovement(vehicle, 90-35)
-        
+              
         # Print and log telemetry
         print(f"Vehicle coords {vehicle.location.global_frame}")
         logger.debug(f"Vehicle coords {vehicle.location.global_frame}")
@@ -145,11 +143,19 @@ async def mainFunc():
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
         vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress
-        await asyncio.sleep(3)
+        await asyncio.sleep(5)
+        print("Sleep Done")
+        gd.ArmDrone(vehicle) # Arm Vehicle
+        gd.ServoMovement(vehicle, 90-35)
         async def liftOffAndMoveToCenter():
+            print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62*1.5)
+            print("Goto body")
             await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
+            print("Finished Liftoff and Move to Center")
+            
         lft_off_task = asyncio.create_task(liftOffAndMoveToCenter())
+        #await asyncio.sleep(5)
 
     # print(f"Coords lat: {coords_lat}")
     visitCorners = False
@@ -183,6 +189,11 @@ async def mainFunc():
          # Command the vehicle to rotate 360 degrees over 12 seconds
         rot_start_time = 0
         sim_multiplier = 2
+        print("Await liftoff task")
+        while not (lft_off_task.done()):
+            print("Await liftoff task")
+            await asyncio.sleep(1)
+        print("Liftoff task Done")
         while True:
             err = cam.grab(status)
             if err == sl.ERROR_CODE.SUCCESS:
@@ -193,8 +204,9 @@ async def mainFunc():
                 frame_status = True
                 img = zedImage.get_data()
                 mtime = time.time() - mission_start_time
-                print(img.shape)
+                #print(img.shape)
                 # If vehicle has finished moving to the center of the field, begin survey spin
+                #print("If statement to spin")
                 if lft_off_task.done() and not spin_started:
                     gd.SetConditionYaw(vehicle, 360, relative = True, speed = 360//rotate_time)
                     rot_start_time = time.time()
@@ -214,6 +226,7 @@ async def mainFunc():
                 Utils.dumpDebugData("v_att", yaw=attttt.yaw, pitch=attttt.pitch , roll=attttt.roll, heading=vehicle.heading, mission_time=mtime)
                 pois_seen, centroids, bboxes = poiTracker.processFrame(vehicle, img)
                 for row, ridx in zip(centroids, range(centroids.shape[0])):
+                     #print("commented utils")
                      Utils.dumpDebugData("centroids", x=row[0], y=row[1], index=ridx, mission_time=mtime)
                 if pois_seen:
                     world_coords = pixCoordToWorldPosition(vehicle, fcam_info, centroids, mission_time=mtime)

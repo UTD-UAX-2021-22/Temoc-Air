@@ -64,11 +64,11 @@ async def TakeOffDrone(vehicle, elevation):
     reachedElevation = False
     while reachedElevation == False:  # While the target elevation has not been reached
         currDroneHeight = vehicle.location.global_relative_frame.alt
-        print("Current drone elevation: ", currDroneHeight)
+        #print("Current drone elevation: ", currDroneHeight)
 
         if currDroneHeight >= (.95 * elevation):  # If the drone is at the target elevation (account for timing)
             reachedElevation = True
-        asyncio.sleep(1)
+        await asyncio.sleep(1)
     print("Drone has reached target elevation")
     
 
@@ -210,11 +210,13 @@ async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
     await asyncio.sleep(0.25) # Wait to try and avoid reporting move completion prematurely
     while vehicle.groundspeed <= stop_speed:
         # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
+        print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
         # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
         await asyncio.sleep(0.25)
 
     while vehicle.groundspeed > stop_speed:
         # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
+        print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
         # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
         await asyncio.sleep(0.1)
 

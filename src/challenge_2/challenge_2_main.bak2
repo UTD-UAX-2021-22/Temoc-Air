@@ -2,7 +2,7 @@ import argparse
 import logging
 import time
 import sys
-from challenge_2.Utils import calculateVisitPath
+#from challenge_2.Utils import calculateVisitPath
 import pyzed.sl as sl
 
 from tqdm import tqdm
