@@ -144,7 +144,7 @@ async def mainFunc():
         print(f"Field Corners: {coords_lat}")
         vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress
         await asyncio.sleep(5)
-        print("Sleep Done")
+        #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
         gd.ServoMovement(vehicle, 90-35)
         async def liftOffAndMoveToCenter():
@@ -188,7 +188,7 @@ async def mainFunc():
         spin_started = False
          # Command the vehicle to rotate 360 degrees over 12 seconds
         rot_start_time = 0
-        sim_multiplier = 2
+        sim_multiplier = 1
         print("Await liftoff task")
         while not (lft_off_task.done()):
             print("Await liftoff task")
