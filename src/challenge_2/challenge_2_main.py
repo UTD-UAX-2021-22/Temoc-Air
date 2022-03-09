@@ -2,6 +2,7 @@ import argparse
 import logging
 import time
 import sys
+from challenge_2.Utils import calculateVisitPath
 import pyzed.sl as sl
 
 from tqdm import tqdm
@@ -129,7 +130,6 @@ async def mainFunc():
         print(f"Field Corners: {coords_lat}")
         vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress
         await asyncio.sleep(3)
-        print("sleep")
         async def liftOffAndMoveToCenter():
             await gd.TakeOffDrone(vehicle, 7.62*1.5)
             await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
@@ -152,16 +152,13 @@ async def mainFunc():
 
     logo_found = False
     gd.ServoMovement(vehicle, 90-35)
-    cf =  cam_front.open(init)
-    if cf != cam.ERROR_CODE.SUCCESS:
-        print(repr(cf))
-        #exit(1)
+    err = cam_front.grab(runtime)
+    if err != sl.ERROR_CODE.SUCCESS:
+        print(repr(err))
+        exit(1)
     runtime = cam.RuntimeParameters()
-    print(runtime)
     #imageSize = cam.get_camera_information().camera_resolution
-    print(imageSize)
     zedImage = cam.Mat(round(cam.get_camera_information().camera_resolution.width, 2), cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
-    print(zedImage)
     with MissionContext("POI Search"):
         # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
         fail_count = 0
@@ -210,7 +207,7 @@ async def mainFunc():
                 #     break
             else:
                 print("Camera Failed line 202")
-        cam_front.close()
+        #cam_front.close()
     PilImage.fromarray(geoTracker.getGrayscaleMap(), 'L').save("poi_heatmap.png")
     
 
@@ -220,10 +217,10 @@ async def mainFunc():
         logger.debug("Cam start")
         #NEED SERVO MOVEMENT HERE
         gd.ServoMovement(vehicle, 0)
-        cd =  cam_down.open(init)
-        if cd != sl.ERROR_CODE.SUCCESS:
-            print(repr(cd))
-            #exit(1)
+        err = cam_down.grab(runtime)
+        if err != sl.ERROR_CODE.SUCCESS:
+            print(repr(err))
+            exit(1)
         runtime = sl.RuntimeParameters()
         imageSize = sl.get_camera_information().camera_resolution
         zedImage = sl.Mat(imageSize.width, imageSize.height, sl.MAT_TYPE.U8_C4) 
@@ -307,7 +304,7 @@ async def mainFunc():
                     gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                     # gd.MoveRelative(vehicle, logo_position_relative[0, [1,0,2]] * np.array([1, 1, 0])*0.5)
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
-            cam_down.close()
+            cam.close()
         # with MissionContext("Final Descent"):
         #     gd.LandDrone(vehicle)
 
