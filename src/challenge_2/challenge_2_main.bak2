@@ -70,18 +70,6 @@ async def mainFunc():
         #cam_down = cv2.VideoCapture(down_cam_info.id)
         #cam_front = AsyncSubscriber("/iris_demo/camera_front/image_raw/compressed", CompressedImage, queue_size=1)
         #cam_down = AsyncSubscriber("/iris_demo/camera/image_raw/compressed", CompressedImage, queue_size=1)
-        # cam = sl.Camera()
-        # init = sl.InitParameters()
-        # init.camera_resolution = sl.RESOLUTION.HD720
-        # init.camera_fps=60
-        # init.depth_mode = sl.DEPTH_MODE.NONE
-        # status = cam.open(init)
-        # if status != sl.ERROR_CODE.SUCCESS:
-        #     print(repr(status))
-        #     exit(1)
-        # cam_front = cam
-        # cam_down = cam
-
         cam = sl.Camera()
         init = sl.InitParameters()
         init.camera_resolution = sl.RESOLUTION.HD720
@@ -91,16 +79,12 @@ async def mainFunc():
         if status != sl.ERROR_CODE.SUCCESS:
             print(repr(status))
             exit(1)
-        else:
-            print("camera Open")
         cam_front = cam
         cam_down = cam
-        zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
-        imageSize = cam.get_camera_information().camera_resolution
-        print("Connecting to Drone")
+        print("connecting")
         vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
         #vehicle = gd.ConnectToCopter('dev/ttyTHS2')
-        print("Connected")
+        print("connected")
 
     # Yards to meters
     def y2m(v):
@@ -168,13 +152,13 @@ async def mainFunc():
 
     logo_found = False
     gd.ServoMovement(vehicle, 90-35)
-    # err = cam.grab(status)
-    # if err != sl.ERROR_CODE.SUCCESS:
-    #     print(repr(err))
-    #     exit(1)
-    # runtime = cam.RuntimeParameters()
-    # #imageSize = cam.get_camera_information().camera_resolution
-    # zedImage = cam.Mat(round(cam.get_camera_information().camera_resolution.width, 2), cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
+    err = cam_front.grab(runtime)
+    if err != sl.ERROR_CODE.SUCCESS:
+        print(repr(err))
+        exit(1)
+    runtime = cam.RuntimeParameters()
+    #imageSize = cam.get_camera_information().camera_resolution
+    zedImage = cam.Mat(round(cam.get_camera_information().camera_resolution.width, 2), cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
     with MissionContext("POI Search"):
         # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
         fail_count = 0
@@ -184,10 +168,10 @@ async def mainFunc():
         rot_start_time = 0
         sim_multiplier = 2
         while True:
-            err = cam.grab(status)
+            err = cam_front.grab(runtime)
             if err == sl.ERROR_CODE.SUCCESS:
         # async for ftemp in cf:
-                ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize) # Get frame from front camera
+                ftemp = cam_front.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize) # Get frame from front camera
                 #frame_status, img = (True, bridge.imgmsg_to_cv2(rospy.wait_for_message('/iris_demo/camera/image_raw',Image), desired_encoding="bgr8")) # Acquire image from front camera
                 #frame_status, img = (True, bridge.compressed_imgmsg_to_cv2(ftemp, desired_encoding="bgr8")) # Convert front camera frame to OpenCV image
                 frame_status = True
@@ -233,13 +217,13 @@ async def mainFunc():
         logger.debug("Cam start")
         #NEED SERVO MOVEMENT HERE
         gd.ServoMovement(vehicle, 0)
-        err = cam.grab(status)
+        err = cam_down.grab(runtime)
         if err != sl.ERROR_CODE.SUCCESS:
             print(repr(err))
             exit(1)
-        # runtime = sl.RuntimeParameters()
-        # imageSize = sl.get_camera_information().camera_resolution
-        # zedImage = sl.Mat(imageSize.width, imageSize.height, sl.MAT_TYPE.U8_C4) 
+        runtime = sl.RuntimeParameters()
+        imageSize = sl.get_camera_information().camera_resolution
+        zedImage = sl.Mat(imageSize.width, imageSize.height, sl.MAT_TYPE.U8_C4) 
         #cam_down.subscribe()
         logger.debug("Visit start")
         for target_to_investigate in tqdm(path, desc="Investigating POIs"):
@@ -250,9 +234,9 @@ async def mainFunc():
             #await cd.__anext__()
             logger.debug("Starting downward scan")
             for i in tqdm(range(30), desc="Looking for logo", leave=False):
-                err = cam.grab(status)
+                err = cam_down.grab(runtime)
                 if err == sl.ERROR_CODE.SUCCESS:
-                    ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize)
+                    ftemp = cam_down.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize)
                     #frame_status, img = (True, bridge.compressed_imgmsg_to_cv2(ftemp, desired_encoding="bgr8"))
                     frame_status = True
                     img = zedImage.get_data()
@@ -279,9 +263,9 @@ async def mainFunc():
             # Position at start of the frame
             frame_acq_pos = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
             #frame_status, img = (True, bridge.imgmsg_to_cv2(rospy.wait_for_message('/iris_demo/camera/image_raw',Image), desired_encoding="bgr8")) # Acquire image from front camera
-            err = cam.grab(status)              
+            err = cam_down.grab(runtime)              
             if err == sl.ERROR_CODE.SUCCESS:
-                ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize)
+                ftemp = cam_down.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize)
                 frame_status = True
                 img = zedImage.get_data()
 

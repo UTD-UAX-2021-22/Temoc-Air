@@ -363,7 +363,7 @@ def SetROI(loc):
 	
 def ServoMovement(vehicle, position):
     if(position == 0):
-        pwm = 1300
+        pwm = 1225
     elif (position == 90):
         pwm = 1925
     else:
