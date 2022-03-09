@@ -360,7 +360,8 @@ def SetROI(loc):
         )
     # send command to vehicle
     vehicle.send_mavlink(msg)
-def ServoMovement(position):
+	
+def ServoMovement(vehicle, position):
     if(position == 0):
         pwm = 1300
     elif (position == 90):
@@ -373,11 +374,12 @@ def ServoMovement(position):
         mavutil.mavlink.MAV_CMD_DO_SET_SERVO, #command
         0, #confirmation
         9, pwm , 0, 0, #params 1-4
-        loc.lat,
-        loc.lon,
-        loc.alt
+        0,
+        0,
+        0
         )
     vehicle.send_mavlink(msg)
+
 
 
 """

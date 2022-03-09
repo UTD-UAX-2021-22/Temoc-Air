@@ -361,9 +361,9 @@ def SetROI(loc):
     # send command to vehicle
     vehicle.send_mavlink(msg)
 def ServoMovement(position):
-    if(position == "down"):
+    if(position == 0):
         pwm = 1300
-    else if (position == "up"):
+    elif (position == 90):
         pwm = 1925
     else:
         pwm = 1612

@@ -129,10 +129,10 @@ async def mainFunc():
         print(f"Field Corners: {coords_lat}")
         vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress
         await asyncio.sleep(3)
+        print("sleep")
         async def liftOffAndMoveToCenter():
             await gd.TakeOffDrone(vehicle, 7.62*1.5)
             await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
-        
         lft_off_task = asyncio.create_task(liftOffAndMoveToCenter())
 
     # print(f"Coords lat: {coords_lat}")
@@ -153,13 +153,15 @@ async def mainFunc():
     logo_found = False
     gd.ServoMovement(vehicle, 90-35)
     cf =  cam_front.open(init)
-    if cf != sl.ERROR_CODE.SUCCESS:
+    if cf != cam.ERROR_CODE.SUCCESS:
         print(repr(cf))
-        zed.close()
-        exit(1)
-    runtime = sl.RuntimeParameters()
-    imageSize = zed.get_camera_information().camera_resolution
-    zedImage = sl.Mat(imageSize.width, imageSize.height, sl.MAT_TYPE.U8_C4)
+        #exit(1)
+    runtime = cam.RuntimeParameters()
+    print(runtime)
+    #imageSize = cam.get_camera_information().camera_resolution
+    print(imageSize)
+    zedImage = cam.Mat(round(cam.get_camera_information().camera_resolution.width, 2), cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
+    print(zedImage)
     with MissionContext("POI Search"):
         # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
         fail_count = 0
@@ -221,10 +223,9 @@ async def mainFunc():
         cd =  cam_down.open(init)
         if cd != sl.ERROR_CODE.SUCCESS:
             print(repr(cd))
-            zed.close()
-            exit(1)
+            #exit(1)
         runtime = sl.RuntimeParameters()
-        imageSize = zed.get_camera_information().camera_resolution
+        imageSize = sl.get_camera_information().camera_resolution
         zedImage = sl.Mat(imageSize.width, imageSize.height, sl.MAT_TYPE.U8_C4) 
         #cam_down.subscribe()
         logger.debug("Visit start")
