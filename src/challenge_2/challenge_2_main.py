@@ -208,6 +208,7 @@ async def mainFunc():
                 # If vehicle has finished moving to the center of the field, begin survey spin
                 #print("If statement to spin")
                 if lft_off_task.done() and not spin_started:
+                    print("Spin")
                     gd.SetConditionYaw(vehicle, 360, relative = True, speed = 360//rotate_time)
                     rot_start_time = time.time()
                     spin_started = True

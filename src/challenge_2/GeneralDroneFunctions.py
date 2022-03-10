@@ -365,11 +365,11 @@ def SetROI(loc):
 	
 def ServoMovement(vehicle, position):
     if(position == 0):
-        pwm = 1225
+        pwm = 1125
     elif (position == 90):
-        pwm = 1925
+        pwm = 1825
     else:
-        pwm = 1612
+        pwm = 1512
 
     msg = vehicle.message_factory.command_long_encode(
         0, 0,    # target system, target component
