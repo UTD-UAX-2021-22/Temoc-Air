@@ -53,7 +53,7 @@ def bbox_area(a):
 
 @dataclass
 class Hue_Detector_Opts:
-    target_hue: float = 300.0
+    target_hue: float = 330.0
     hue_range: Tuple[float, float] = (320, 360)
     tolerance: float = 0.10
     opening_size: int = 10
@@ -120,7 +120,7 @@ class POI_Tracker:
         draw_contours = True
         in_range = False
         poi_optical_tracking = False
-        occupied_ratio_test = False
+        occupied_ratio_test = True
         minOccupancyRatio = 0.7
 
         if in_range:
