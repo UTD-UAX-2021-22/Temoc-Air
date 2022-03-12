@@ -57,7 +57,8 @@ def detectLogo(img, logo_markers, board, markerSize = 4, totalMarkers=50, draw=T
     # logger.debug("Testing")
     # Convert input color image into grayscale
     #TODO: Investigate adaptive thresholding
-    # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img = gray
     # gray = img
     key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
     arucoDict = aruco.Dictionary_get(key)
