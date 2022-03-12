@@ -9,8 +9,8 @@ from tqdm import tqdm
 #import chall2_test
 #print(vars(chall2_test))
 # import GeneralDroneFunctions
-# import GeneralDroneFunctions as gd
-import DummyGeneralFunctions as gd
+import GeneralDroneFunctions as gd
+#import DummyGeneralFunctions as gd
 from GeneralDroneFunctions import ServoMovement
 from LogoDetection import detectLogo
 from POI import POI_Tracker
@@ -101,8 +101,8 @@ async def mainFunc():
         zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
         imageSize = cam.get_camera_information().camera_resolution
         print("Connecting to Drone")
-        # vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
-        vehicle = DummyVehicle()
+        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+        #vehicle = DummyVehicle()
         #vehicle = gd.ConnectToCopter('dev/ttyTHS2')
         print("Connected")
 
@@ -146,7 +146,7 @@ async def mainFunc():
         geoTracker = GeoTracker(corners=new_pos)
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
-        # vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
+        vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
