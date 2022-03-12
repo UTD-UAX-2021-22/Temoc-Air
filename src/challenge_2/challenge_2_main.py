@@ -2,14 +2,15 @@ import argparse
 import logging
 import time
 import sys
-from Utils import calculateVisitPath
+from Utils import DummyVehicle, calculateVisitPath
 import pyzed.sl as sl
 
 from tqdm import tqdm
 #import chall2_test
 #print(vars(chall2_test))
 # import GeneralDroneFunctions
-import GeneralDroneFunctions as gd
+# import GeneralDroneFunctions as gd
+import DummyGeneralFunctions as gd
 from GeneralDroneFunctions import ServoMovement
 from LogoDetection import detectLogo
 from POI import POI_Tracker
@@ -88,6 +89,8 @@ async def mainFunc():
         init.camera_fps=60
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
+        recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
+        cam.enable_recording(recording_param)
         if status != sl.ERROR_CODE.SUCCESS:
             print(repr(status))
             exit(1)
@@ -98,7 +101,8 @@ async def mainFunc():
         zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
         imageSize = cam.get_camera_information().camera_resolution
         print("Connecting to Drone")
-        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+        # vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+        vehicle = DummyVehicle()
         #vehicle = gd.ConnectToCopter('dev/ttyTHS2')
         print("Connected")
 
@@ -142,7 +146,7 @@ async def mainFunc():
         geoTracker = GeoTracker(corners=new_pos)
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
-        vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress
+        # vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
@@ -334,7 +338,8 @@ async def mainFunc():
                     gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                     # gd.MoveRelative(vehicle, logo_position_relative[0, [1,0,2]] * np.array([1, 1, 0])*0.5)
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
-            cam.close()
+        
+        cam.close()
         # with MissionContext("Final Descent"):
         #     gd.LandDrone(vehicle)
 

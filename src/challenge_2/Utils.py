@@ -29,8 +29,13 @@ def setupLoggers(filename='test_log'):
 
 def dumpDebugData(fname, **data):
     if logging.getLogger("data_dumps").isEnabledFor(logging.DEBUG):
-            with open(f"pd_data/{fname}.jsonl", 'a') as file:
-                    file.write(f"{json.dumps(data)}\n")
+        Path("pd_data").mkdir(parents=True, exist_ok=True)
+        with open(f"pd_data/{fname}.jsonl", 'a') as file:
+                file.write(f"{json.dumps(data)}\n")
+
+def setUpTelemetryLog(vehicle):
+    def callback(self, attr_name, value):
+        dumpDebugData("telemetry", **{'name': attr_name, 'value': value})
 
 class MissionContext():
     def __init__(self, name, logger="mission_control") -> None:
@@ -144,10 +149,12 @@ class DummyGPSCoords(BaseModel):
 
 class DummyLocation(BaseModel):
     global_relative_frame: DummyGPSCoords = DummyGPSCoords()
+    global_frame: DummyGPSCoords = DummyGPSCoords()
 
 class DummyVehicle(BaseModel):
     location: DummyLocation = DummyLocation()
     attitude: DummyAttitude = DummyAttitude()
+    heading: int = 0
 
 @dataclass
 class DummyAtt:
