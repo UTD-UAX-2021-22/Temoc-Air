@@ -4,13 +4,14 @@ import logging
 import math
 from pathlib import Path
 import time
+import time as time_mod
 from typing import List, Tuple
 import cv2
 import utm
 import numpy as np
 from scipy.spatial.transform import Rotation
 from pydantic import BaseModel
-
+import json_numpy
 
 def setupLoggers(filename='test_log'):
     import logging
@@ -33,9 +34,25 @@ def dumpDebugData(fname, **data):
         with open(f"pd_data/{fname}.jsonl", 'a') as file:
                 file.write(f"{json.dumps(data)}\n")
 
-def setUpTelemetryLog(vehicle):
-    def callback(self, attr_name, value):
-        dumpDebugData("telemetry", **{'name': attr_name, 'value': value})
+
+class AdvancedLogger():
+    def __init__(self, dir="pb_data") -> None:
+        Path(dir).mkdir(parents=True, exist_ok=True)
+        import time
+        self.file = open(f'{dir}/{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}_flat.jsonl', "a")
+        self.file_struct = open(f'{dir}/{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}_struct.jsonl', "a")
+
+    def writeValues(self, time=None, **values):
+        if time is None:
+            time=time_mod.time()
+        for vname, v in values.items():
+            self.file.write(f"{json_numpy.dumps({'name': vname, 'value': v, 'time': time})}\n")
+
+        t_dict = {'time': time}
+        self.file_struct.write(f"{json_numpy.dumps({**t_dict, **values})}\n")
+
+
+
 
 class MissionContext():
     def __init__(self, name, logger="mission_control") -> None:
@@ -161,6 +178,17 @@ class DummyAtt:
     pitch: float
     roll: float
     yaw: float
+
+def setUpTelemetryLog(vehicle, logging_device: AdvancedLogger):
+    def callback(self, attr_name, value):
+        if attr_name in ["last_heartbeat", "heading", "velocity", "airspeed", "groundspeed"]:
+            logging_device.writeValues(**{attr_name: value})
+        elif attr_name in ["channels", "location"]:
+            pass
+        else:
+            logging_device.writeValues(**{attr_name: vars(value)})
+    if not isinstance(vehicle, DummyVehicle):
+        vehicle.add_attribute_listener('*', callback)
 
 if __name__ == "__main__":
     setupLoggers(filename="util_log")

@@ -2,15 +2,15 @@ import argparse
 import logging
 import time
 import sys
-from Utils import DummyVehicle, calculateVisitPath
+from Utils import AdvancedLogger, DummyVehicle, calculateVisitPath
 import pyzed.sl as sl
 
 from tqdm import tqdm
 #import chall2_test
 #print(vars(chall2_test))
 # import GeneralDroneFunctions
-import GeneralDroneFunctions as gd
-#import DummyGeneralFunctions as gd
+# import GeneralDroneFunctions as gd
+import DummyGeneralFunctions as gd
 from GeneralDroneFunctions import ServoMovement
 from LogoDetection import detectLogo
 from POI import POI_Tracker
@@ -59,6 +59,9 @@ async def mainFunc():
     
     landing_tolerance = 0.1524 # 6 inches
 
+    telem_logger = Utils.AdvancedLogger()
+    frame_count = 0
+
     # Initialize Trackers/detectors
     poiTracker = POI_Tracker()
     logoDetector = LogoDetector(logo_template_image)
@@ -85,7 +88,7 @@ async def mainFunc():
 
         cam = sl.Camera()
         init = sl.InitParameters()
-        init.camera_resolution = sl.RESOLUTION.HD720
+        init.camera_resolution = sl.RESOLUTION.HD1080
         init.camera_fps=60
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
@@ -101,10 +104,12 @@ async def mainFunc():
         zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
         imageSize = cam.get_camera_information().camera_resolution
         print("Connecting to Drone")
-        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
-        #vehicle = DummyVehicle()
+        # vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+        vehicle = DummyVehicle()
         #vehicle = gd.ConnectToCopter('dev/ttyTHS2')
         print("Connected")
+        Utils.setUpTelemetryLog(vehicle, telem_logger)
+
 
     # Yards to meters
     def y2m(v):
@@ -146,7 +151,7 @@ async def mainFunc():
         geoTracker = GeoTracker(corners=new_pos)
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
-        vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
+        # vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
@@ -200,6 +205,8 @@ async def mainFunc():
         print("Liftoff task Done")
         while True:
             err = cam.grab(status)
+            telem_logger.writeValues(frame_count=frame_count)
+            frame_count += 1
             if err == sl.ERROR_CODE.SUCCESS:
         # async for ftemp in cf:
                 ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize) # Get frame from front camera
@@ -218,7 +225,6 @@ async def mainFunc():
                     spin_started = True
                 elif lft_off_task.done() and spin_started and (time.time() - rot_start_time) > (sim_multiplier*rotate_time+1):
                     break
-                #cv2.imshow('Downward Camera', img)
                 if not frame_status:
                     fail_count += 1
                     logger.critical(f"Failed to acquire frame from forward camera. Failed {fail_count} times")
@@ -230,9 +236,13 @@ async def mainFunc():
                 attttt = vehicle.attitude
                 Utils.dumpDebugData("v_att", yaw=attttt.yaw, pitch=attttt.pitch , roll=attttt.roll, heading=vehicle.heading, mission_time=mtime)
                 pois_seen, centroids, bboxes = poiTracker.processFrame(vehicle, img)
+                telem_logger.writeValues(centroid_np=centroids, centroid_bboxes=bboxes)
+                cv2.imshow('Downward Camera', img)
+                cv2.waitKey(1)
                 for row, ridx in zip(centroids, range(centroids.shape[0])):
                      #print("commented utils")
                      Utils.dumpDebugData("centroids", x=row[0], y=row[1], index=ridx, mission_time=mtime)
+                     telem_logger.writeValues(centroid=dict(x=row[0], y=row[1], index=ridx))
                 if pois_seen:
                     world_coords = pixCoordToWorldPosition(vehicle, fcam_info, centroids, mission_time=mtime)
                     geoTracker.reportPoi(world_coords, mission_time=mtime)
@@ -252,6 +262,8 @@ async def mainFunc():
         #NEED SERVO MOVEMENT HERE
         gd.ServoMovement(vehicle, 0)
         err = cam.grab(status)
+        telem_logger.writeValues(frame_count=frame_count)
+        frame_count += 1
         if err != sl.ERROR_CODE.SUCCESS:
             print(repr(err))
             exit(1)
@@ -269,12 +281,16 @@ async def mainFunc():
             logger.debug("Starting downward scan")
             for i in tqdm(range(30), desc="Looking for logo", leave=False):
                 err = cam.grab(status)
+                telem_logger.writeValues(frame_count=frame_count)
+                frame_count += 1
                 if err == sl.ERROR_CODE.SUCCESS:
-                    ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize)
+                    ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
                     #frame_status, img = (True, bridge.compressed_imgmsg_to_cv2(ftemp, desired_encoding="bgr8"))
                     frame_status = True
                     img = zedImage.get_data()
                     logo_found, _ = logoDetector.processFrame(vehicle, img)
+                    cv2.imshow('Downward Camera', img)
+                    cv2.waitKey(1)
                     if logo_found:
                         break
             
@@ -297,9 +313,11 @@ async def mainFunc():
             # Position at start of the frame
             frame_acq_pos = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
             #frame_status, img = (True, bridge.imgmsg_to_cv2(rospy.wait_for_message('/iris_demo/camera/image_raw',Image), desired_encoding="bgr8")) # Acquire image from front camera
-            err = cam.grab(status)              
+            err = cam.grab(status)
+            telem_logger.writeValues(frame_count=frame_count)
+            frame_count += 1         
             if err == sl.ERROR_CODE.SUCCESS:
-                ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize)
+                ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
                 frame_status = True
                 img = zedImage.get_data()
 
@@ -322,14 +340,19 @@ async def mainFunc():
                     fail_count = 0
 
                 logo_found, logo_center = logoDetector.processFrame(vehicle, img)
+                
                 if logo_found:
                     # from dronekit import VehicleMode
                     # vehicle.mode = VehicleMode('LAND')
+                    cv2.circle(img, logo_center.astype(np.int32).flatten(), 15, (255, 255, 0), 4)
                     logo_position_relative = pixCoordToRelativePosition(vehicle, down_cam_info, logo_center)
                     logo_x_angle, logo_y_angle = pixCoordToAngle(logo_center, down_cam_info.hfov, down_cam_info.vfov, down_cam_info.resolution[0], down_cam_info.resolution[1])
                     Utils.dumpDebugData("logo_seek", logo_found=logo_found, x_l=logo_center.item(0), y_l=logo_center.item(1),
                         x_lr=logo_position_relative.flatten().item(0), y_lr=logo_position_relative.flatten().item(1),
                         dist=float(np.linalg.norm(logo_position_relative)), mission_time=mtime)
+                    telem_logger.writeValues(logo_info=dict(logo_found=logo_found, x_l=logo_center.item(0), y_l=logo_center.item(1),
+                        x_lr=logo_position_relative.flatten().item(0), y_lr=logo_position_relative.flatten().item(1),
+                        dist=float(np.linalg.norm(logo_position_relative))))
                 
                     if np.linalg.norm(logo_position_relative*np.array([1,1,0])) < landing_tolerance:
                         logger.info(f"Horizontal distance of {np.linalg.norm(logo_position_relative)} within {landing_tolerance}m tolerance. Begin Descent")
@@ -338,6 +361,8 @@ async def mainFunc():
                     gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                     # gd.MoveRelative(vehicle, logo_position_relative[0, [1,0,2]] * np.array([1, 1, 0])*0.5)
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
+                cv2.imshow('Downward Camera', img)
+                cv2.waitKey(1)
         
         cam.close()
         # with MissionContext("Final Descent"):

@@ -26,16 +26,16 @@ def ArmDrone(vehicle):
     time.sleep(5)
     
 async def TakeOffDrone(vehicle, elevation):
-    logger.debug(f"Attempted takeoff to height of {elevation}. Sleeping 10s to simulate.")
-    await asyncio.sleep(10)
+    logger.debug(f"Attempted takeoff to height of {elevation}. Sleeping 4s to simulate.")
+    await asyncio.sleep(4)
     
 
 def FrameVelocityControl(vehicle, velX, velY, velZ):
     logger.debug(f"Attempted velocity command of {velX} {velY} {velZ}")
 
 def GimbalMovement(vehicle, pitch, roll, yaw, locationRoi):
-    logger.debug(f"Attempted gimbal movement to {pitch} {roll} {yaw} {locationRoi} -- Sleeping 10s")
-    time.sleep(10)
+    logger.debug(f"Attempted gimbal movement to {pitch} {roll} {yaw} {locationRoi} -- Sleeping 4s")
+    time.sleep(4)
 
 def DownloadChallenge(vehicle):
     logger.debug("Attempted command download. Sleeping 5s.")
