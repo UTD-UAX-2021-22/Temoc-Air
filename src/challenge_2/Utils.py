@@ -141,6 +141,31 @@ def calculateVisitPath(pois, start):
     logging.getLogger(__name__).debug(f"Path found: {path}")
     return path
 
+def calculateGridSearch(field_dims = (53, 50), border=2, direction=0, max_run_space=9, min_run_space=6, start=(0,0)):
+    assert 0 <= direction < 2
+    
+    runs = np.ceil((field_dims[direction]) / max_run_space).astype(np.int64)
+    start_x = 0 if start[0] == 0 else field_dims[0]
+    start_y = 0 if start[1] == 0 else field_dims[1]
+    other_dir = 1 if direction == 0 else 0
+    
+    other_dir_start = field_dims[other_dir]-border if start[other_dir] == 1 else border
+    other_dir_end = field_dims[other_dir]-border if start[other_dir] != 1 else border
+
+    run_ends = np.repeat(np.linspace(border, field_dims[direction]-border, runs), 2)
+    if start[direction] == 1:
+        run_ends = np.flip(run_ends)
+
+    run_ends_other = np.tile([other_dir_start, other_dir_end, other_dir_end, other_dir_start], np.ceil(runs/2).astype(np.int64))
+
+    output = np.zeros((runs*2,2))
+    output[:,direction] = run_ends
+    output[:,other_dir] = run_ends_other[0:(runs*2)]
+
+    return output
+
+
+
 
 class CameraInfo(BaseModel):
     name: str = "Dummy Camera"
@@ -222,6 +247,13 @@ if __name__ == "__main__":
     test_pois = np.array([[0, 1], [0, 2], [0, 3]])
     start = np.array([0,4])
     print(calculateVisitPath(test_pois, start))
+    import plotly.express as px
+
+    gp = calculateGridSearch(direction=1, start=(0,0))
+    print(gp)
+
+    fig = px.line(x=gp[:,0], y=gp[:,1],text=np.arange(0, gp.shape[0]))
+    fig.show()
     
     # pixc = np.asarray([[100, 50], [0, 0], [200, 100]])
     # print(f"Result: {pixCoordToAngle(pixc, 45, 30, 200, 100)}")

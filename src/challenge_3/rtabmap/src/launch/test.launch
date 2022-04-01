@@ -1,0 +1,16 @@
+<launch>
+<!--<node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="0 0 0 0 0 0 odom base_link 100" /> -->
+<!--<node pkg="tf" type="static_transform_publisher" name="link2_broadcaster" args="0 0 0 0 0 0 base_link zed_base_rot 100" /> -->
+<node name="rtabmap" pkg="rtabmap_ros" type="rtabmap" args="--Grid/RangeMax 5 -d">
+  <param name="Optimizer/Iterations" type="int" value="50"/>
+  <param name="Icp/VoxelSize" type="double" value="0"/>
+  <param name="map_always_update" type="bool" value="true"/>
+  <param name="odom_sensor_sync" type="bool" value="true" />
+  <!-- <param name="approx_sync" type="bool" value="true"/> -->
+  <!-- <param name="odom_frame_id" type="string" value="odom"/> -->
+  <remap from="rgb/image"   to="zed2/zed_node/rgb/image_rect_color"/>
+  <remap from="rgb/camera_info"   to="zed2/zed_node/rgb/camera_info"/>
+  <remap from="depth/image"   to="zed2/zed_node/depth/depth_registered"/>
+  <remap from="odom"   to="zed2/zed_node/odom"/>
+</node>
+</launch>
