@@ -4,6 +4,7 @@ import cv2.aruco as aruco # type: ignore
 import numpy as np
 import os
 import enum
+import POI
 from enum import auto
 
 from collections import deque
@@ -45,32 +46,32 @@ if __name__ == "__main__":
     mode: VisModes = VisModes.NORMAL
 
     hsvChannel = 2
-    optical_flow_enabled = False
+    optical_flow_enabled = True
     enableOverlay = False
     optical_flow_features = []
-    enableOpening = False
-    targetHue = (336.7/360)*255
-    hueTolerance = 0.10
-    cap = cv2.VideoCapture("2021_11_12_10_58_15.mp4")
+    enableOpening = True
+    targetHue = (5/360)*255
+    hueTolerance = 0.08
+    cap = cv2.VideoCapture("C:/Users/mattl/Desktop/vids/output1.avi")
     contours_enabled = False
 
     open_kernel_size = 10
     opening_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (open_kernel_size, open_kernel_size))
 
     frame_memory: Deque[np.ndarray] = deque(maxlen=2)
-
+    track = 0
     while True:
         success, img = cap.read()
         frame_memory.appendleft(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV_FULL);
         # findArucoMarkers(img) 
         mskh = maskHue(targetHue, hueTolerance, hsv[:,:,0])
-
+        # frame_memory.appendleft(cv2.cvtColor(mskh, cv2.COLOR_BGR2GRAY))  # Moved to try to print the mask hue image to screen
         if enableOpening:
             mskh = cv2.morphologyEx(mskh, cv2.MORPH_OPEN, opening_kernel)
 
         imageShow = img
-
+        
         if mode == VisModes.HUE_MASK:
             imageShow = mskh
         elif mode == VisModes.HUE_DISTANCE:
@@ -98,6 +99,16 @@ if __name__ == "__main__":
             cv2.drawContours(imageShow, contours, -1, (255, 255, 0), 4)
 
 
+        poi_track = POI.POI_Tracker()
+
+
+        new_pois_found, centroids, bboxes = poi_track.processFrame(None, imageShow)
+        if(new_pois_found):
+            # print(new_pois_found)          Debugging poi tracker
+            # print(centroids)
+            # print(bboxes)
+            track+=1
+            print("found" + str(track))    
         cv2.imshow('img', imageShow)
         k = cv2.waitKey(1) & 0xff
         

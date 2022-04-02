@@ -53,12 +53,13 @@ def bbox_area(a):
 
 @dataclass
 class Hue_Detector_Opts:
-    target_hue: float = 330.0
-    hue_range: Tuple[float, float] = (320, 360)
-    tolerance: float = 0.10
+    target_hue: float = 302
+    hue_range: Tuple[float, float] = (290, 315)
+    tolerance: float = 0.005
     opening_size: int = 10
     value_range: Tuple[float, float] = (0.5*255, 255)
-    saturation_range: Tuple[float, float] = (0.1*255, 255)
+    # saturation_range: Tuple[float, float] = (0.1*255, 255)
+    saturation_range: Tuple[float, float] = (35, 255)
 
     def hueInHSV(self):
         return (self.target_hue / 360)*255
@@ -120,7 +121,7 @@ class POI_Tracker:
         draw_contours = True
         in_range = False
         poi_optical_tracking = False
-        occupied_ratio_test = True
+        occupied_ratio_test = False
         minOccupancyRatio = 0.7
 
         if in_range:
@@ -201,7 +202,7 @@ class POI_Tracker:
         return len(detected_poi_bboxes)>0, centroids, detected_poi_bboxes
 
     def getUnvisitedPOIs(self):
-        return [];
+        return detected_pois;
         
 
 
