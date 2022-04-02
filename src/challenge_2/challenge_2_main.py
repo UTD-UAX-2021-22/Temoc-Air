@@ -8,9 +8,9 @@ import pyzed.sl as sl
 from tqdm import tqdm
 #import chall2_test
 #print(vars(chall2_test))
-# import GeneralDroneFunctions
-# import GeneralDroneFunctions as gd
-import DummyGeneralFunctions as gd
+#import GeneralDroneFunctions
+import GeneralDroneFunctions as gd
+#import DummyGeneralFunctions as gd
 from GeneralDroneFunctions import ServoMovement
 from LogoDetection import detectLogo
 from POI import POI_Tracker
@@ -104,8 +104,8 @@ async def mainFunc():
         zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
         imageSize = cam.get_camera_information().camera_resolution
         print("Connecting to Drone")
-        # vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
-        vehicle = DummyVehicle()
+        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+        #vehicle = DummyVehicle()
         #vehicle = gd.ConnectToCopter('dev/ttyTHS2')
         print("Connected")
         Utils.setUpTelemetryLog(vehicle, telem_logger)
@@ -151,7 +151,7 @@ async def mainFunc():
         geoTracker = GeoTracker(corners=new_pos)
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
-        # vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
+        vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
@@ -164,7 +164,7 @@ async def mainFunc():
             print("Finished Liftoff and Move to Center")
             
         lft_off_task = asyncio.create_task(liftOffAndMoveToCenter())
-        #await asyncio.sleep(5)
+        await asyncio.sleep(5)
 
     # print(f"Coords lat: {coords_lat}")
     visitCorners = False
@@ -237,8 +237,8 @@ async def mainFunc():
                 Utils.dumpDebugData("v_att", yaw=attttt.yaw, pitch=attttt.pitch , roll=attttt.roll, heading=vehicle.heading, mission_time=mtime)
                 pois_seen, centroids, bboxes = poiTracker.processFrame(vehicle, img)
                 telem_logger.writeValues(centroid_np=centroids, centroid_bboxes=bboxes)
-                cv2.imshow('Downward Camera', img)
-                cv2.waitKey(1)
+                # cv2.imshow('Downward Camera', img)
+                # cv2.waitKey(1)
                 for row, ridx in zip(centroids, range(centroids.shape[0])):
                      #print("commented utils")
                      Utils.dumpDebugData("centroids", x=row[0], y=row[1], index=ridx, mission_time=mtime)
@@ -246,13 +246,15 @@ async def mainFunc():
                 if pois_seen:
                     world_coords = pixCoordToWorldPosition(vehicle, fcam_info, centroids, mission_time=mtime)
                     geoTracker.reportPoi(world_coords, mission_time=mtime)
+                else: 
+                    print("No POI's Seen")
                 
                 # if (time.time() - rot_start_time) > (2*rotate_time+1):
                 #     break
             else:
                 print("Camera Failed line 202")
         #cam_front.close()
-    PilImage.fromarray(geoTracker.getGrayscaleMap(), 'L').save("poi_heatmap.png")
+    #PilImage.fromarray(geoTracker.getGrayscaleMap(), 'L').save("poi_heatmap.png")
     
 
     with MissionContext("POI Visit"):
@@ -289,8 +291,8 @@ async def mainFunc():
                     frame_status = True
                     img = zedImage.get_data()
                     logo_found, _ = logoDetector.processFrame(vehicle, img)
-                    cv2.imshow('Downward Camera', img)
-                    cv2.waitKey(1)
+                    # cv2.imshow('Downward Camera', img)
+                    #cv2.waitKey(1)
                     if logo_found:
                         break
             
@@ -361,8 +363,8 @@ async def mainFunc():
                     gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                     # gd.MoveRelative(vehicle, logo_position_relative[0, [1,0,2]] * np.array([1, 1, 0])*0.5)
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
-                cv2.imshow('Downward Camera', img)
-                cv2.waitKey(1)
+                # cv2.imshow('Downward Camera', img)
+                #cv2.waitKey(1)
         
         cam.close()
         # with MissionContext("Final Descent"):

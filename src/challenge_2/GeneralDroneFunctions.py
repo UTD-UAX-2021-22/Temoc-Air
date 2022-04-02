@@ -64,7 +64,7 @@ async def TakeOffDrone(vehicle, elevation):
     reachedElevation = False
     while reachedElevation == False:  # While the target elevation has not been reached
         currDroneHeight = vehicle.location.global_relative_frame.alt
-        #print("Current drone elevation: ", currDroneHeight)
+        print("Current drone elevation: ", currDroneHeight)
 
         if currDroneHeight >= (.95 * elevation):  # If the drone is at the target elevation (account for timing)
             reachedElevation = True
