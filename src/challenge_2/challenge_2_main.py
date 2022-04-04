@@ -89,7 +89,7 @@ async def mainFunc():
         cam = sl.Camera()
         init = sl.InitParameters()
         init.camera_resolution = sl.RESOLUTION.HD1080
-        init.camera_fps=60
+        init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
@@ -365,7 +365,7 @@ async def mainFunc():
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
                 # cv2.imshow('Downward Camera', img)
                 #cv2.waitKey(1)
-        
+        cam.disable_recording()
         cam.close()
         # with MissionContext("Final Descent"):
         #     gd.LandDrone(vehicle)
