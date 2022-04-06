@@ -9,7 +9,7 @@ from tqdm import tqdm
 #import chall2_test
 #print(vars(chall2_test))
 #import GeneralDroneFunctions
-import GeneralDroneFunctions as gd
+import GeneralDroneFunctions as gd #TODO REANABLE FOR FLIGHT
 #import DummyGeneralFunctions as gd
 from GeneralDroneFunctions import ServoMovement
 from LogoDetection import detectLogo
@@ -104,7 +104,7 @@ async def mainFunc():
         zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
         imageSize = cam.get_camera_information().camera_resolution
         print("Connecting to Drone")
-        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000) # TODO REANABLE FOR FLIGHT
         #vehicle = DummyVehicle()
         #vehicle = gd.ConnectToCopter('dev/ttyTHS2')
         print("Connected")
@@ -246,8 +246,8 @@ async def mainFunc():
                 if pois_seen:
                     world_coords = pixCoordToWorldPosition(vehicle, fcam_info, centroids, mission_time=mtime)
                     geoTracker.reportPoi(world_coords, mission_time=mtime)
-                else: 
-                    print("No POI's Seen")
+                # else: 
+                #     print("No POI's Seen")
                 
                 # if (time.time() - rot_start_time) > (2*rotate_time+1):
                 #     break
@@ -292,7 +292,7 @@ async def mainFunc():
                     img = zedImage.get_data()
                     logo_found, _ = logoDetector.processFrame(vehicle, img)
                     # cv2.imshow('Downward Camera', img)
-                    #cv2.waitKey(1)
+                    # cv2.waitKey(1)
                     if logo_found:
                         break
             
@@ -364,7 +364,7 @@ async def mainFunc():
                     # gd.MoveRelative(vehicle, logo_position_relative[0, [1,0,2]] * np.array([1, 1, 0])*0.5)
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
                 # cv2.imshow('Downward Camera', img)
-                #cv2.waitKey(1)
+                # cv2.waitKey(1)
         cam.disable_recording()
         cam.close()
         # with MissionContext("Final Descent"):
