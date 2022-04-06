@@ -132,3 +132,7 @@ dmypy.json
 logs/
 *.mov
 *.mp4
+src/challenge_2/*.svo
+src/challenge_2/pb_data
+src/challenge_2/pd_data
+src/challenge_2/logs
