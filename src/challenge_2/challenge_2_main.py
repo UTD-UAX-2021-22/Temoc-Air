@@ -157,7 +157,7 @@ async def mainFunc():
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
         if dummyDrone == False:
-            vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
+            vehicle.parameters['ANGLE_MAX'] = 30*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
