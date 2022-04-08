@@ -9,7 +9,7 @@ from tqdm import tqdm
 #import chall2_test
 #print(vars(chall2_test))
 #import GeneralDroneFunctions
-dummyDrone = False # Set to True to bench test and not connect to real drone, False for actual flights
+dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     import DummyGeneralFunctions as gd    
 else:
@@ -157,7 +157,7 @@ async def mainFunc():
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
         if dummyDrone == False:
-            vehicle.parameters['ANGLE_MAX'] = 10*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
+            vehicle.parameters['ANGLE_MAX'] = 30*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle

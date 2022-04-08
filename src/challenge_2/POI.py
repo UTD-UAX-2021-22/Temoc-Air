@@ -53,13 +53,13 @@ def bbox_area(a):
 
 @dataclass
 class Hue_Detector_Opts:
-    target_hue: float = 349#330#302
-    hue_range: Tuple[float, float] = (330, 360)#(300,350)#(290, 315)
-    tolerance: float = .05 #.005
+    target_hue: float = 349 #220#349#330#302
+    hue_range: Tuple[float, float] = (315,350)#(290, 315) (0,360)->usingForBlackmarkers
+    tolerance: float = .07#.1 #.005
     opening_size: int = 10
-    value_range: Tuple[float, float] = (0.5*255, 255)
+    value_range: Tuple[float, float] =  (.5*255,255)#(1,255)#(0.5*255, 255)
     # saturation_range: Tuple[float, float] = (0.1*255, 255)
-    saturation_range: Tuple[float, float] = (30, 200)
+    saturation_range: Tuple[float, float] = (50,200)#(0, 10)
 
     def hueInHSV(self):
         return (self.target_hue / 360)*255
@@ -143,7 +143,10 @@ class POI_Tracker:
         def rotatedRectArea(rrdat):
             _, (w,h), _ = rrdat
             return w*h
-
+        #im = frame_bgr
+        #imgray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        #ret, thresh = cv2.threshold(imgray, 0, 255, 0)
+        #contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if occupied_ratio_test:
             if logger.isEnabledFor(logging.DEBUG):
@@ -167,6 +170,9 @@ class POI_Tracker:
 
         if draw_contours:
             cv2.drawContours(frame_bgr, contours, -1, (255, 255, 0), 2)
+
+            #cv2.drawContours(frame_bgr, contours, -1, (0,255,0), 3)
+			
             for c in contours:
                 drawCountorAABBox(c, frame_bgr)
 
