@@ -52,7 +52,7 @@ if __name__ == "__main__":
     enableOpening = True
     targetHue = (5/360)*255
     hueTolerance = 0.08
-    cap = cv2.VideoCapture("C:/Users/mattl/Desktop/vids/output1.avi")
+    cap = cv2.VideoCapture("output1.avi")
     contours_enabled = False
 
     open_kernel_size = 10
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     track = 0
     while True:
         success, img = cap.read()
-        frame_memory.appendleft(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
+        #frame_memory.appendleft(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV_FULL);
         # findArucoMarkers(img) 
         mskh = maskHue(targetHue, hueTolerance, hsv[:,:,0])
