@@ -94,6 +94,7 @@ async def mainFunc():
         init.camera_resolution = sl.RESOLUTION.HD1080
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 5) # (0, 100) % of camera frame rate. -1 sets it to auto
         status = cam.open(init)
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
         cam.enable_recording(recording_param)
@@ -226,7 +227,7 @@ async def mainFunc():
                 #print("If statement to spin")
                 if lft_off_task.done() and not spin_started:
                     print("Spin")
-                    gd.SetConditionYaw(vehicle, 360, relative = True, speed = 360//rotate_time)
+                    gd.SetConditionYaw(vehicle, 360, relative = True, speed = 15)#speed = 360//rotate_time) Commented part makes speed 24 deg/sec
                     rot_start_time = time.time()
                     spin_started = True
                 elif lft_off_task.done() and spin_started and (time.time() - rot_start_time) > (sim_multiplier*rotate_time+1):
