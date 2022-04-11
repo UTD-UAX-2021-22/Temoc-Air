@@ -21,7 +21,7 @@ def mainFunc():
 	
         vehicle = connect('127.0.0.1:14550', wait_ready=True)
         #homeLocation = vehicle.location.global_relative_frame
-        gd.LandDrone(vehicle)
+        #gd.LandDrone(vehicle)
         gd.ArmDrone(vehicle)
         gd.TakeOffDrone2(vehicle, gd.FeetToMeters(15))
         vehicle.airspeed = 3
