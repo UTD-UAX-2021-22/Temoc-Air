@@ -2,19 +2,26 @@
 	Please stick to the syntax conventions when adding new functions
 	Uncomment the main at the bottom to test anything
 """
-from dronekit import connect, mavutil, VehicleMode, LocationGlobalRelative, APIException
+from asyncio.log import logger
+from dronekit import connect, mavutil, VehicleMode, LocationGlobalRelative, APIException, Vehicle
 import time
 import socket
 import math
 import argparse  # Allows to input vals from command line to use them in python
+import asyncio
+import logging
+import utm
+import threading
 
-def ConnectToCopter():
-    parser = argparse.ArgumentParser(description='commands')
-    parser.add_argument('--connect')
-    args = parser.parse_args()
+import numpy as np
+
+def ConnectToCopter(connection_string):
+    #parser = argparse.ArgumentParser(description='commands')
+    #parser.add_argument('--connect')
+    #args = parser.parse_args()
 
     # Gives value after --connect; the IP address
-    connection_string = args.connect
+    #connection_string = args.connect
 
     if not connection_string:  # If the connection string is empty; none provided
         # Create a SITL drone instance instead of launching one beforehand
@@ -25,7 +32,7 @@ def ConnectToCopter():
     vehicle = connect(connection_string, wait_ready=True)
     return vehicle
 
-def ArmDrone():
+def ArmDrone(vehicle):
     print("Copter Pre-Arm Checks")
     while not vehicle.is_armable:  # Ensure autopilot is ready
         print(" Waiting for Copter to initialise...")
@@ -51,7 +58,7 @@ def ArmDrone():
         time.sleep(1)
     print("Drone is Armed")
     
-def TakeOffDrone(elevation):
+async def TakeOffDrone(vehicle, elevation):
     print("Flying up to ", elevation, "m")
     vehicle.simple_takeoff(elevation)  # Begin takeoff procedure to reach elevation
 
@@ -62,11 +69,11 @@ def TakeOffDrone(elevation):
 
         if currDroneHeight >= (.95 * elevation):  # If the drone is at the target elevation (account for timing)
             reachedElevation = True
-        time.sleep(1)
+        await asyncio.sleep(1)
     print("Drone has reached target elevation")
     
 
-def FrameVelocityControl(velX, velY, velZ):
+def FrameVelocityControl(vehicle, velX, velY, velZ):
     """ Move copter in direction based on specified velocity vectors, velX and VelY are parallel to the North and East direction (not to the front and sie of the vehicle). velZ is perpendicular to the plane of velX and velY, with a positive value towards the ground (so up is negative) following right-hand convention
 
 	velX > 0 -> fly North
@@ -94,7 +101,7 @@ def FrameVelocityControl(velX, velY, velZ):
         0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlin
     vehicle.send_mavlink(instructions)
 
-def GimbalMovement(pitch, roll, yaw, locationRoi):
+def GimbalMovement(vehicle, pitch, roll, yaw, locationRoi):
     """
         Rotates the camera to a specific vector in space and tracks a location of interest.
 
@@ -112,14 +119,14 @@ def GimbalMovement(pitch, roll, yaw, locationRoi):
     # Set gimbal/camera to track specified location in global relative frame
     vehicle.gimbal.target_location(locationRoi)
 
-def DownloadChallenge():
+def DownloadChallenge(vehicle):
     """Download current challenge from the copter"""
     
     commands = vehicle.commands
     commands.download()
     commands.wait_ready()  # Wait until download is finished
 
-def ClearCurrentChallenge():
+def ClearCurrentChallenge(vehicle):
     """Clears the Current mission (challenge)"""
     
     # commands = vehicle.commands
@@ -129,7 +136,7 @@ def ClearCurrentChallenge():
 
 
 """(Unsure about how getting challange file works still) Get challenge file from copter"""
-def GetCurrentChallenge(challenge):
+def GetCurrentChallenge(vehicle, challenge):
     vehicle.mode = VehicleMode("AUTO")
     while vehicle.mode != "AUTO":
         print("Setting copter into AUTO mode...")
@@ -137,7 +144,7 @@ def GetCurrentChallenge(challenge):
     print("Vehicle is in AUTO mode")
 
 
-def PrintTelemetry():
+def PrintTelemetry(vehicle):
     """Read various info from the copter"""
     
     vehicle.wait_ready('autopilot_version')
@@ -170,7 +177,7 @@ def PrintTelemetry():
     # Is thestate estimation filter ok?
     print(f"EKF Ok: {vehicle.ekf_ok}")
 
-def LandDrone():
+def LandDrone(vehicle):
     print("Setting copter into LAND mode")
     vehicle.mode = VehicleMode('LAND')
     while vehicle.mode != 'LAND':
@@ -184,7 +191,7 @@ def LandDrone():
 	
     print("The copter has landed!")
 
-def GoToTargetBody(north, east, down):
+async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
     """
         Send command to request the vehicle fly to a specified
         location in the North, East, Down frame of the drone's body. So north is direction that
@@ -201,8 +208,79 @@ def GoToTargetBody(north, east, down):
         0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
 	# send command to vehicle
     vehicle.send_mavlink(msg)
+    await asyncio.sleep(0.25) # Wait to try and avoid reporting move completion prematurely
+    while vehicle.groundspeed <= stop_speed:
+        # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
+        print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
+        # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
+        await asyncio.sleep(0.25)
 
-def GetDistanceInMeters(aLoc1, aLoc2):
+    while vehicle.groundspeed > stop_speed:
+        # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
+        print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
+        # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
+        await asyncio.sleep(0.1)
+
+async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_distance=1, time_out=20):
+    coords = np.asarray(coords).flatten()
+    # msg = vehicle.message_factory.set_position_target_global_int_encode(
+    #     0,  # time_boot_ms (not used)
+    #     0, 0,  # target system, target component
+    #     mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,  # frame
+    #     0b0000111111111000 ,  # type_mask (only positions enabled)
+    #     int(coords[0]*10_000_000), int(coords[0]*10_000_000), alt,
+    #     0, 0, 0,  # x, y, z velocity in m/s  (not used)
+    #     0, 0, 0,  # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
+    #     0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
+    # # msg = vehicle.message_factory.set_position_target_local_ned_encode(
+
+	# # send command to vehicle
+    # vehicle.send_mavlink(msg)
+    vehicle.simple_goto(LocationGlobalRelative(lat=coords[0], lon=coords[1], alt=alt))
+    # while vehicle.groundspeed <= stop_speed:
+    #     # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
+    #     # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
+    #     await asyncio.sleep(0.25)
+
+    # while vehicle.groundspeed > stop_speed:
+    #     # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
+    #     # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
+    #     await asyncio.sleep(0.1)
+
+    tx, ty, *_ = utm.from_latlon(coords[0], coords[1])
+    time_start = time.time()
+    while True:
+        cx, cy, *_ =  utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
+        if np.linalg.norm(np.array([tx-cx , ty-cy, alt - vehicle.location.global_relative_frame.alt])) > stop_distance or vehicle.groundspeed > stop_speed:
+            logging.getLogger(__name__).debug("Waiting for global move to complete")
+            await asyncio.sleep(0.25)
+        else:
+            break
+
+        if time.time() - time_start > time_out:
+            logging.getLogger(__name__).critical(f"Global Move Exceeded Time Out of {time_out}s ")
+
+def MoveRelative(vehicle, pos):
+    """
+        Send command to request the vehicle fly to a specified
+        location in the North, East, Down frame of the drone's body. So north is direction that
+        drone is facing.
+    """
+    pos = np.asarray(pos).flatten()
+    msg = vehicle.message_factory.set_position_target_local_ned_encode(
+        0,  # time_boot_ms (not used)
+        0, 0,  # target system, target component
+        mavutil.mavlink.MAV_FRAME_BODY_NED,  # frame
+        0b110111111000,  # type_mask (only positions enabled)
+        pos[0], pos[1], pos[2],
+        0, 0, 0,  # x, y, z velocity in m/s  (not used)
+        0, 0, 0,  # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
+        0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
+	# send command to vehicle
+    vehicle.send_mavlink(msg)
+
+
+def GetDistanceInMeters(vehicle, aLoc1, aLoc2):
     """ Returns the ground distance in metres between two LocationGlobal objects.
         This method is an approximation, and will not be accurate over large distances and close to the
         earth's poles. It comes from the ArduPilot test code:
@@ -212,13 +290,19 @@ def GetDistanceInMeters(aLoc1, aLoc2):
     dlong = aLoc2.lon - aLoc1.lon
     return math.sqrt((dlat * dlat) + (dlong * dlong)) * 1.113195e5
 
+
+def distance(lat1, lon1, lat2, lon2):
+    p = math.pi/180
+    a = 0.5 - math.cos((lat2-lat1)*p)/2 + math.cos(lat1*p) * math.cos(lat2*p) * (1-math.cos((lon2-lon1)*p))/2
+    return 12742 * math.asin(math.sqrt(a)) #2*R*asin...
+
 def YardsToMeters(yards):
 	return yards * 0.9144
 
 def FeetToMeters(feet):
 	return feet * 0.3048
 
-def SetConditionYaw(heading, relative = False):
+def SetConditionYaw(vehicle, heading, relative = False, speed = 60):
     """ The vehicle “yaw” is the direction that the vehicle is facing in the horizontal plane. On Copter this yaw need not be the direction of travel (though it is by default).
     """
     if relative:
@@ -231,12 +315,38 @@ def SetConditionYaw(heading, relative = False):
         mavutil.mavlink.MAV_CMD_CONDITION_YAW, #command
         0, #confirmation
         heading,    # param 1, yaw in degrees
-        0,          # param 2, yaw speed deg/s
-        1,          # param 3, direction -1 ccw, 1 cw
+        speed,          # param 2, yaw speed deg/s
+        1 if heading >= 0 else -1,          # param 3, direction -1 ccw, 1 cw
         relativeToDirOfTravel, # param 4, relative offset 1, absolute angle 0
         0, 0, 0)    # param 5 ~ 7 not used
     # send command to vehicle
     vehicle.send_mavlink(msg)
+
+def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
+    msg = vehicle.message_factory.landing_target_encode(
+        0,          # time target data was processed, as close to sensor capture as possible
+        1,          # target num, not used
+        mavutil.mavlink.MAV_FRAME_BODY_NED, # frame, not used
+        -x * math.pi / 180.0,          # X-axis angular offset, in radians
+        -y * math.pi / 180.0,          # Y-axis angular offset, in radians
+        z,          # distance, in meters
+        0,          # Target x-axis size, in radians
+        0,          # Target y-axis size, in radians
+        0,          # x	float	X Position of the landing target on MAV_FRAME
+        0,          # y	float	Y Position of the landing target on MAV_FRAME
+        0,          # z	float	Z Position of the landing target on MAV_FRAME
+        (1,0,0,0),  # q	float[4]	Quaternion of landing target orientation (w, x, y, z order, zero-rotation is 1, 0, 0, 0)
+        2,          # type of landing target: 2 = Fiducial marker
+        1,          # position_valid boolean
+    )
+    vehicle.send_mavlink(msg)
+    vehicle.message_factory
+
+def StartPrecisionLanding(vehicle):
+    vehicle.parameters['PLND_ENABLED'] = 1 # Enable precision landing
+    vehicle.parameters['PLND_TYPE'] = 1 # Optical fiducial tracking
+    vehicle.parameters['ANGLE_MAX'] = 2*100 # Angle in centidegress
+    vehicle.mode = VehicleMode("LAND")
 
 def SetROI(loc):
     """ Set ROI command to point camer gimbal at a specified region of interest, drone must also turn to face ROI
@@ -253,6 +363,133 @@ def SetROI(loc):
         )
     # send command to vehicle
     vehicle.send_mavlink(msg)
+	
+def ServoMovement(vehicle, position):
+    if(position == 0):
+        pwm = 1125
+    elif (position == 90):
+        pwm = 1825
+    else:
+        pwm = 1512
+
+    msg = vehicle.message_factory.command_long_encode(
+        0, 0,    # target system, target component
+        mavutil.mavlink.MAV_CMD_DO_SET_SERVO, #command
+        0, #confirmation
+        9, pwm , 0, 0, #params 1-4
+        0,
+        0,
+        0
+        )
+    vehicle.send_mavlink(msg)
+
+async def scanning(begin, seconds):
+    
+    while(True):
+        currentTime= time.time()
+        elapsedTime = currentTime - begin
+        print("scanning")
+        if elapsedTime >= seconds:
+            break
+    await asyncio.sleep(1)
+
+def HowManyRuns(sidelineOffset, offsetOfRun, widthOfField = 160): #distances in feet
+    runOffsetArr = []
+    maxDistance = widthOfField - sidelineOffset
+    runs = int(maxDistance / offsetOfRun )
+    newRun = maxDistance % offsetOfRun
+    for x in range(0, runs):
+        converted = (FeetToMeters(offsetOfRun))
+        runOffsetArr.append(converted)
+    if(newRun >=  (offsetOfRun/2)):
+        runOffsetArr.append(FeetToMeters(newRun - 2)) 
+        return runOffsetArr #returns array of run offset in meters
+    else:
+        return runOffsetArr
+
+def IsMoving(vehicle, dist, homeLocation):
+	while True: #vehicle.mode.name == "GUIDED":
+	        distanceTraveled = GetDistanceInMeters(vehicle, vehicle.location.global_relative_frame, homeLocation)
+	        print(f"Distance traveled: {distanceTraveled}")
+	        if distanceTraveled >= FeetToMeters(dist) * .99999:
+	            print("Target Reached")
+	            print(f"Final distance traveled: {distanceTraveled}")
+	            break
+	        time.sleep(1)
+	        
+
+#when calling GridSearch first set homeLocation = vehicle.location.global_relative_frame 
+async def GridSearch(vehicle,homeLocation):
+    lengthOfRuns = 145 #feet
+    sideOffset = 89
+    runOffset = 20
+    widthOfField = 160
+    cWise = True 
+    
+
+    if(sideOffset >= (widthOfField/2)):
+        cWise = True
+    else:
+        cWise = False
+    ArmDrone(vehicle)
+    await TakeOffDrone(vehicle, FeetToMeters(15))
+    vehicle.airspeed = 3
+    runsArr = HowManyRuns(sideOffset, runOffset)
+    print("Number of runs!!")
+    print(len(runsArr))
+    start_time= time.time()
+    await GoToTargetBody(vehicle, FeetToMeters(lengthOfRuns), 0, 0)
+    await scanning(start_time, 10)
+    IsMoving(vehicle, lengthOfRuns, homeLocation)
+    for running in runsArr:
+    	#distBtwn = running
+        #GoToTargetBody(FeetToMeters(lengthOfRuns), 0, 0)
+        #time.sleep(10)
+        dist = running
+        if(cWise):
+            print("cWise new")
+            start_time= time.time()
+            await scanning(start_time, 2)
+            SetConditionYaw(vehicle, 90, True)
+            time.sleep(5)
+            #GoToTargetBody(FeetToMeters(5), 0, 0)
+            start_time= time.time()
+            await GoToTargetBody(vehicle,dist, 0, 0)
+            await scanning(start_time, 2)
+            IsMoving(vehicle, lengthOfRuns,homeLocation) 
+            time.sleep(5)
+            PrintTelemetry(vehicle)
+            SetConditionYaw(vehicle, 90, True)
+            time.sleep(5)
+            cWise = False
+            start_time= time.time()
+            await GoToTargetBody(vehicle,FeetToMeters(lengthOfRuns), 0, 0)
+            await scanning(start_time, 2)
+            print(f"Distance: {lengthOfRuns}")
+            #IsMoving(vehicle, lengthOfRuns, homeLocation)
+            time.sleep(10)
+        else:
+            print("moving")
+            #SetConditionYaw(vehicle, -90, True)
+            #print("first yaw")
+            SetConditionYaw(vehicle, 270, True)
+            print("second yaw")
+            time.sleep(10)
+            start_time= time.time()
+            await GoToTargetBody(vehicle,dist, 0, 0)
+            await scanning(start_time, 2)
+            time.sleep(10)
+            PrintTelemetry(vehicle)
+            print("moving")
+            SetConditionYaw(vehicle,270, True)
+            time.sleep(10)
+            cWise = True
+            start_time= time.time()
+            await GoToTargetBody(vehicle, FeetToMeters(lengthOfRuns), 0, 0)
+            await scanning(start_time, 2)
+            time.sleep(10)
+
+
 
 """
 ----------------------
@@ -321,4 +558,12 @@ elif curMode == "BASIC_TEST":
 
 	# Stop copter from running
 	vehicle.close()
+elif curMode == "CHALLENGE2_GRID_SEARCH":
+    homeLocation = vehicle.location.global_relative_frame
+    GridSearch()
+            
+            
+    	
+    LandDrone()
+    vehicle.close()
 """
