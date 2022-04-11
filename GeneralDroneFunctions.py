@@ -71,6 +71,20 @@ async def TakeOffDrone(vehicle, elevation):
             reachedElevation = True
         await asyncio.sleep(1)
     print("Drone has reached target elevation")
+
+def TakeOffDrone2(vehicle,elevation):
+    print("Flying up to ", elevation, "m")
+    vehicle.simple_takeoff(elevation)  # Begin takeoff procedure to reach elevation
+
+    reachedElevation = False
+    while reachedElevation == False:  # While the target elevation has not been reached
+        currDroneHeight = vehicle.location.global_relative_frame.alt
+        print("Current drone elevation: ", currDroneHeight)
+
+        if currDroneHeight >= (.95 * elevation):  # If the drone is at the target elevation (account for timing)
+            reachedElevation = True
+        time.sleep(1)
+    print("Drone has reached target elevation")
     
 
 def FrameVelocityControl(vehicle, velX, velY, velZ):
@@ -220,6 +234,24 @@ async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
         print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
         # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
         await asyncio.sleep(0.1)
+
+def GoToTargetBody2(vehicle,north, east, down):
+    """
+        Send command to request the vehicle fly to a specified
+        location in the North, East, Down frame of the drone's body. So north is direction that
+        drone is facing.
+    """
+    msg = vehicle.message_factory.set_position_target_local_ned_encode(
+        0,  # time_boot_ms (not used)
+        0, 0,  # target system, target component
+        mavutil.mavlink.MAV_FRAME_BODY_NED,  # frame
+        0b0000111111111000,  # type_mask (only positions enabled)
+        north, east, down,
+        0, 0, 0,  # x, y, z velocity in m/s  (not used)
+        0, 0, 0,  # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
+        0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
+    # send command to vehicle
+    vehicle.send_mavlink(msg)
 
 async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_distance=1, time_out=20):
     coords = np.asarray(coords).flatten()
@@ -383,7 +415,7 @@ def ServoMovement(vehicle, position):
         )
     vehicle.send_mavlink(msg)
 
-async def scanning(begin, seconds):
+def scanning(begin, seconds):
     
     while(True):
         currentTime= time.time()
@@ -391,7 +423,7 @@ async def scanning(begin, seconds):
         print("scanning")
         if elapsedTime >= seconds:
             break
-    await asyncio.sleep(1)
+
 
 def HowManyRuns(sidelineOffset, offsetOfRun, widthOfField = 160): #distances in feet
     runOffsetArr = []
@@ -419,7 +451,7 @@ def IsMoving(vehicle, dist, homeLocation):
 	        
 
 #when calling GridSearch first set homeLocation = vehicle.location.global_relative_frame 
-async def GridSearch(vehicle,homeLocation):
+def GridSearch(vehicle,homeLocation):
     lengthOfRuns = 145 #feet
     sideOffset = 89
     runOffset = 20
@@ -432,14 +464,14 @@ async def GridSearch(vehicle,homeLocation):
     else:
         cWise = False
     ArmDrone(vehicle)
-    await TakeOffDrone(vehicle, FeetToMeters(15))
+    TakeOffDrone2(vehicle, FeetToMeters(15))
     vehicle.airspeed = 3
     runsArr = HowManyRuns(sideOffset, runOffset)
     print("Number of runs!!")
     print(len(runsArr))
     start_time= time.time()
-    await GoToTargetBody(vehicle, FeetToMeters(lengthOfRuns), 0, 0)
-    await scanning(start_time, 10)
+    threading.Thread(target=GoToTargetBody2(vehicle, FeetToMeters(lengthOfRuns), 0, 0)).start()
+    threading.Thread(target=scanning(start_time, 3)).start()
     IsMoving(vehicle, lengthOfRuns, homeLocation)
     for running in runsArr:
     	#distBtwn = running
@@ -449,13 +481,13 @@ async def GridSearch(vehicle,homeLocation):
         if(cWise):
             print("cWise new")
             start_time= time.time()
-            await scanning(start_time, 2)
+            threading.Thread(target=scanning(start_time, 2)).start()
             SetConditionYaw(vehicle, 90, True)
             time.sleep(5)
             #GoToTargetBody(FeetToMeters(5), 0, 0)
             start_time= time.time()
-            await GoToTargetBody(vehicle,dist, 0, 0)
-            await scanning(start_time, 2)
+            threading.Thread(target=GoToTargetBody2(vehicle,dist, 0, 0)).start()
+            threading.Thread(target=scanning(start_time, 2)).start()
             IsMoving(vehicle, lengthOfRuns,homeLocation) 
             time.sleep(5)
             PrintTelemetry(vehicle)
@@ -463,8 +495,8 @@ async def GridSearch(vehicle,homeLocation):
             time.sleep(5)
             cWise = False
             start_time= time.time()
-            await GoToTargetBody(vehicle,FeetToMeters(lengthOfRuns), 0, 0)
-            await scanning(start_time, 2)
+            threading.Thread(target=GoToTargetBody2(vehicle, FeetToMeters(lengthOfRuns), 0, 0)).start()
+            threading.Thread(target=scanning(start_time, 2)).start()
             print(f"Distance: {lengthOfRuns}")
             #IsMoving(vehicle, lengthOfRuns, homeLocation)
             time.sleep(10)
@@ -476,8 +508,8 @@ async def GridSearch(vehicle,homeLocation):
             print("second yaw")
             time.sleep(10)
             start_time= time.time()
-            await GoToTargetBody(vehicle,dist, 0, 0)
-            await scanning(start_time, 2)
+            threading.Thread(target=GoToTargetBody2(vehicle,dist, 0, 0)).start()
+            threading.Thread(target=scanning(start_time, 3)).start()
             time.sleep(10)
             PrintTelemetry(vehicle)
             print("moving")
@@ -485,8 +517,8 @@ async def GridSearch(vehicle,homeLocation):
             time.sleep(10)
             cWise = True
             start_time= time.time()
-            await GoToTargetBody(vehicle, FeetToMeters(lengthOfRuns), 0, 0)
-            await scanning(start_time, 2)
+            threading.Thread(target=GoToTargetBody2(vehicle,FeetToMeters(lengthOfRuns), 0, 0)).start()
+            threading.Thread(target=scanning(start_time, 2)).start()
             time.sleep(10)
 
 
@@ -567,3 +599,4 @@ elif curMode == "CHALLENGE2_GRID_SEARCH":
     LandDrone()
     vehicle.close()
 """
+
