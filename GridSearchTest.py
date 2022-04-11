@@ -18,10 +18,27 @@ from dronekit import connect
 #TODO: Make actually work
 #TODO: Fallback logic 
 def mainFunc():
+	
         vehicle = connect('127.0.0.1:14550', wait_ready=True)
-        homeLocation = vehicle.location.global_relative_frame
-
+        #homeLocation = vehicle.location.global_relative_frame
+        gd.LandDrone(vehicle)
+        gd.ArmDrone(vehicle)
+        gd.TakeOffDrone2(vehicle, gd.FeetToMeters(15))
+        vehicle.airspeed = 3
+        time.sleep(5)
+        gd.SetConditionYaw(vehicle,180,True)
+        time.sleep(5)
+        gd.GoToTargetBody2(vehicle, gd.FeetToMeters(75),0,0)
+        time.sleep(5)
+        gd.SetConditionYaw(vehicle,90,True)
+        time.sleep(5)
+        gd.GoToTargetBody2(vehicle, gd.FeetToMeters(75),0,0)
+        time.sleep(5)
+        gd.SetConditionYaw(vehicle,90,True)
+        time.sleep(5)
+        
         lengthOfRuns = 145 #feet
+        homeLocation = vehicle.location.global_relative_frame
         sideOffset = 89
         runOffset = 20
         widthOfField = 160
@@ -32,9 +49,7 @@ def mainFunc():
             cWise = True
         else:
             cWise = False
-        gd.ArmDrone(vehicle)
-        gd.TakeOffDrone2(vehicle, gd.FeetToMeters(15))
-        vehicle.airspeed = 3
+        
         runsArr = gd.HowManyRuns(sideOffset, runOffset)
         print("Number of runs!!")
         print(len(runsArr))
@@ -86,7 +101,7 @@ def mainFunc():
                 time.sleep(10)
                 cWise = True
                 start_time= time.time()
-                threading.Thread(target=gd.GoToTargetBody2(vehicle,FeetToMeters(lengthOfRuns), 0, 0)).start()
+                threading.Thread(target=gd.GoToTargetBody2(vehicle,gd.FeetToMeters(lengthOfRuns), 0, 0)).start()
                 threading.Thread(target=gd.scanning(start_time, 2)).start()
                 time.sleep(10)
 
