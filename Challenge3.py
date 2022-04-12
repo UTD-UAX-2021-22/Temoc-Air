@@ -11,19 +11,19 @@ from multiprocessing import Process
 # from GeneralDroneFunctions import ConnectToCopter, FrameVelocityControl
 
 # Global constants
-DEPTH_RANGE_M = [1, 20.0] # Range for the ZED camera
-OBSTANCLE_LINKE_PIXEL_THICKNESS = 1 
+OBSTACLE_LINE_THICKNESS = 1
 FRONT_AVOID_DISTANCE = 2.5 # In meters, if any object is within this distance in front of the copter from the center of the copter then the copter needs to start making adjustments
 PERPENDICULAR_LENGTH = 0.5 # In meters, the length of the copter from the bottom to the top with leeway to determine the height dimensions needed to be checked in the depth map
 WIDTH_AVOID_DISTANCE = 1.2 + 0.3 # The distance from the center of the copter to the blade + leeway (0.3 meters?) if it's not 
 FORWARD_VELECOTY = 5 # This value is just random right now but it is the velocity in the flat north direction
 DISTANCES_ARRAY_LENGTH = 72 # Obstacle distances in front of the stereo camera from left to right
+DEPTH_RANGE_M = [0.5, 10.0] # Range for the ZED camera meters, currently testing a min distance of 0.5 meters
+ERROR_MARGIN = 0.45 # Error margin from copter in meters
 
 # 
 zed = stereolabs.Camera() # Create a Camera object for interacting with the ZED
-last_direction = "r"
-sector_obstacle_coordinates = np.ones((9,3), dtype = np.float) * (9999)
-distances = np.ones((DISTANCES_ARRAY_LENGTH), dtype=np.float)
+sector_obstacle_coordinates = np.ones((9,3), dtype = float) * (9999)
+distances = np.ones((DISTANCES_ARRAY_LENGTH), dtype = float)
 closests_distances = []
 
 # Setup logger file
@@ -37,10 +37,17 @@ log.setLevel(logging.DEBUG)
 log.addHandler(log_file)
  
 """
-    Last Edit: 4/2/2022
+    Last Edit: 4/12/2022
     By: Sean Njenga
     
     Calculates the smallest x, y, z position for a sector in the point_cloud image
+
+    depth: Point cloud data of whole frame.
+    bounds: Bounding box for object in pixels.
+        bounds[0]: x-center
+        bounds[1]: y-center
+        bounds[2]: width of bounding box.
+        bounds[3]: height of bounding box.
 """
 def get_object_depth(depth, bounds):
     area_div = 2
@@ -50,9 +57,9 @@ def get_object_depth(depth, bounds):
     z_vect = []
 
     for j in range(int(bounds[0] - area_div), int(bounds[0] + area_div)):
-        print(f"j-Start {int(bounds[0] - area_div)}, j-Stop {int(bounds[0] + area_div)}")
+        #print(f"j-Start {int(bounds[0] - area_div)}, j-Stop {int(bounds[0] + area_div)}")
         for i in range(int(bounds[1] - area_div), int(bounds[1] + area_div)):
-            print(f"i-Start {int(bounds[0] - area_div),} i-Stop {int(bounds[0] + area_div)}")
+            #print(f"i-Start {int(bounds[0] - area_div),} i-Stop {int(bounds[0] + area_div)}")
             z = depth[i, j, 2]
             if not np.isnan(z) and not np.isinf(z):
                 x_vect.append(depth[i, j, 0])
@@ -62,10 +69,12 @@ def get_object_depth(depth, bounds):
         x_min = min(x_vect)
         y_min = min(y_vect)
         z_min = min(z_vect)
+
+        log.info(f"(x, y, z) = ({x_min}, {y_min}, {z_min})")
     except Exception:
-        x_min = -1
-        y_min = -1
-        z_min = -1
+        x_min = ERROR_MARGIN
+        y_min = ERROR_MARGIN
+        z_min = ERROR_MARGIN
         pass
     return x_min, y_min, z_min
 
@@ -74,7 +83,7 @@ def get_object_depth(depth, bounds):
     then pick out the depth value at the pixel corresponding to each ray. Based on the definition of
     the MAVLink messages, the invalid distance value (below MIN/above MAX) will be replaced with MAX+1.
 """
-def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_depth_m, width, height, OBSTANCLE_LINKE_PIXEL_THICKNESS):
+def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_depth_m, width, height, OBSTACLE_LINE_THICKNESS):
     depth_img_width = width * 2  # Parameters for depth image
     step = depth_img_width / DISTANCES_ARRAY_LENGTH # Parameters for obstacle distance message
     
@@ -90,12 +99,12 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
         elif dist_m < min_depth_m:
             distances[i] = 0
         elif dist_m >= max_depth_m or np.isnan(dist_m):
-            distances[i] = 20.01
+            distances[i] = 10.01
         elif np.isinf(dist_m):
-            distances[i] = 655.35
+            distances[i] = 655.36
 
-    # log.info(f"final distances array in m: \n{distances}")
-    print("final distances array in m:\n{}".format(distances))
+    # log.info(f"final distances array in m:\n{distances}")
+    # print("{}".format(distances), end='\r')
 
 """
     Last Edit: 4/4/2022
@@ -165,43 +174,23 @@ def depth_sector():
     # pointcloud.header.frame_id ='zed_9_sector_scan'
     # pointcloud.channels = [channel]
 
+    # viewer = gl.GLViewer()
+    # viewer.init(len(sys.argv), sys.argv, zed.get_camera_information().camera_model, res)
+
     cur = 0
-    while cur < 1: # Capturing 1 images
+    while True: # Capturing 1 images
         # A new image is available if grab() returns SUCCESS
         if zed.grab(runtime_parameters) == stereolabs.ERROR_CODE.SUCCESS:
-            zed.retrieve_image(image_mat, stereolabs.VIEW.LEFT)
-            image = image_mat.get_data()
-            
-            zed.retrieve_image(sector_mat, stereolabs.VIEW.LEFT)
+            zed.retrieve_image(sector_mat, stereolabs.VIEW.DEPTH)
             image_sector = sector_mat.get_data()
-            
+
             # Retrieve depth map. Depth is aligned on the left image
             # zed.retrieve_measure(depth, stereolabs.MEASURE.DEPTH)
             
-            # Retrieve point cloud. Point cloud is aligned on the left image.
             zed.retrieve_measure(point_cloud_mat, stereolabs.MEASURE.XYZ)
             depth = point_cloud_mat.get_data()
-            distances_from_depth_image(point_cloud_mat, distances, DEPTH_RANGE_M[0], DEPTH_RANGE_M[1], width, height, OBSTANCLE_LINKE_PIXEL_THICKNESS)
-            center = np.mean(distances[34:38])
-            
-            x1, y1 = int(0), int(height)
-            x2, y2 = int(width * 2), int(height)
-            line_thickness = OBSTANCLE_LINKE_PIXEL_THICKNESS
-            cv2.line(image, (x1, y1), (x2, y2), (0, 255, 0), thickness = line_thickness)
-            
-            # Format the output image for OpenCV for testing
-            if center > DEPTH_RANGE_M[1]:
-                cv2.circle(image, (width, height), 20, (0, 255, 0), 2)
-            elif center <= DEPTH_RANGE_M[1] and center > 10:
-                cv2.putText(image, ("{:1.3} m".format(center)), ((width - 50), (height + 50)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                cv2.circle(image, (width, height), 20, (0, 255, 0), 2)
-            elif center > 5 and center <= 10:
-                cv2.putText(image, ("{:1.3} m".format(center)), ((width - 70), (height + 65)), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 255), 2)
-                cv2.circle(image, (width, height), 20, (0, 255, 255), 4)
-            else:
-                cv2.putText(image, ("{:1.3} m".format(center)), ((width - 100), (height + 70)), cv2.FONT_HERSHEY_DUPLEX, 2, (0, 0, 255), 2)
-                cv2.circle(image, (width, height), 20, (0, 0, 255), -1)
-                cv2.rectangle(image, (0, 100), ((width * 2 - 5),(height * 2)), (30,30,255), 3)
+            distances_from_depth_image(point_cloud_mat, distances, DEPTH_RANGE_M[0], DEPTH_RANGE_M[1], width, height, OBSTACLE_LINE_THICKNESS)
+            # center = np.mean(distances[34:38])
             
             # create 9 sector image with distance information
             # divide view into 3x3 matrix
@@ -237,7 +226,8 @@ def depth_sector():
                 sector_obstacle_coordinates[i][0] = x
                 sector_obstacle_coordinates[i][1] = y
                 sector_obstacle_coordinates[i][2] = z
-                distance = math.sqrt(x * x + y * y + z * z)
+                # cv2.circle(image_sector, (int(x + x_step / 2 + gx), int(y + y_step / 2 + gy)), 2, (0, 255, 0), 2)
+                distance = math.sqrt(x * x + y * y + z * z) - ERROR_MARGIN
                 distance = "{:.2f}".format(distance)
                 closests_distances.append(distance)
                 cv2.putText(image_sector, " " +  (str(distance) + " m"),
@@ -248,15 +238,16 @@ def depth_sector():
 
                 while gy < (height * 2):
                     sector[1] = y_step / 2 + gy
-                   
+            
                     # calculate depth of closest object in sector
                     x, y, z = get_object_depth(depth, sector)
                     sector_obstacle_coordinates[i][0] = x
                     sector_obstacle_coordinates[i][1] = y
                     sector_obstacle_coordinates[i][2] = z
-                    distance = math.sqrt(x * x + y * y + z * z)
+                    distance = math.sqrt(x * x + y * y + z * z) - ERROR_MARGIN
                     distance = "{:.2f}".format(distance)
                     closests_distances.append(distance)
+                    # cv2.circle(image_sector, (int(x + x_step / 2), int(y + y_step / 2)), 3, (0, 255, 0), 2)
                     cv2.putText(image_sector, " " +  (str(distance) + " m"),
                                 ((gx + 10), (gy + y_step - 10)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
@@ -264,14 +255,17 @@ def depth_sector():
                     i += 1
                 gx += x_step
                 
+            # cv2.setWindowProperty("window",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
+            cv2.imshow("Distance Grid", image_sector)
+            cv2.waitKey(1)
+                
             # Send point_cloud data to ROS node
             # pointcloud.points = [
             #     Point32(x=sector_obstacle_coordinates[j][0],y=sector_obstacle_coordinates[j][1],z=sector_obstacle_coordinates[j][2])
             #     for j in range(9)]
             # node5.publish(pointcloud)
             
-            cur = cur + 1
-
+            # cur = cur + 1
 
     # Testing custom velocity vector sending incase the communication link to Mavlink through ROS nodes does not work
     # if  float(closests_distances[1]) > 1.5 and float(closests_distances[7]) < 1.5 and float(closests_distances[4]) > FRONT_AVOID_DISTANCE:
@@ -279,9 +273,11 @@ def depth_sector():
     # elif  float(closests_distances[7]) < FRONT_AVOID_DISTANCE and  float(closests_distances[1]) > FRONT_AVOID_DISTANCE and  float(closests_distances[4]) > FRONT_AVOID_DISTANCE:
     #     print("Go Left")
 
-    log.info(f"Middle 3 sectors of the image {closests_distances[1]} {closests_distances[4]} {closests_distances[7]}")
-    cv2.imshow("Distance Grid", image_sector)
-    cv2.waitKey()
+    # for j in range(9):
+    #     log.info(f"{sector_obstacle_coordinates[j][0]}" )
+    #log.info(f"Middle 3 sectors of the image {sector_obstacle_coordinates[j][0]} {closests_distances[4]} {closests_distances[7]}")
+    # cv2.imshow("Distance Grid", image_sector)
+    # cv2.waitKey()
             
     # Close all cv2 images
     cv2.destroyAllWindows()
