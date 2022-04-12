@@ -94,8 +94,8 @@ async def mainFunc():
         init.camera_resolution = sl.RESOLUTION.HD1080
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
-        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 5) # (0, 100) % of camera frame rate. -1 sets it to auto
         status = cam.open(init)
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 5) # (0, 100) % of camera frame rate. -1 sets it to auto
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
         cam.enable_recording(recording_param)
         if status != sl.ERROR_CODE.SUCCESS:

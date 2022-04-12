@@ -53,13 +53,13 @@ def bbox_area(a):
 
 @dataclass
 class Hue_Detector_Opts:
-    target_hue: float = 349 #220#349#330#302
-    hue_range: Tuple[float, float] = (315,350)#(290, 315) (0,360)->usingForBlackmarkers
-    tolerance: float = .07#.1 #.005
+    target_hue: float = 353 #220#349#330#302
+    hue_range: Tuple[float, float] = (330,360)#(290, 315) (0,360)->usingForBlackmarkers
+    tolerance: float = .009#.006#.1 #.005
     opening_size: int = 10
     value_range: Tuple[float, float] =  (.5*255,255)#(1,255)#(0.5*255, 255)
     # saturation_range: Tuple[float, float] = (0.1*255, 255)
-    saturation_range: Tuple[float, float] = (50,200)#(0, 10)
+    saturation_range: Tuple[float, float] = (40,160)#(100,255)#(50,200)#(0, 10)
 
     def hueInHSV(self):
         return (self.target_hue / 360)*255
