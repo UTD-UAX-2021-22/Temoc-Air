@@ -366,7 +366,7 @@ def SetROI(loc):
 def ServoMovement(vehicle, position):
     
     if(position <= 0):
-        pwm = 1125
+        pwm = 825
     elif (position >= 90):
         pwm = 1825
     # elif(22 <= position  <= 25):
@@ -377,7 +377,7 @@ def ServoMovement(vehicle, position):
     #     pwm = 1512
     else:   
         calcPwm = float(7.77777 * position)
-        newPwm = int(calcPwm) + 1125
+        newPwm = int(calcPwm) + 825
         pwm = newPwm
 
     msg = vehicle.message_factory.command_long_encode(
