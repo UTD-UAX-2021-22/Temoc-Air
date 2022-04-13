@@ -376,7 +376,7 @@ def ServoMovement(vehicle, position):
     # else:
     #     pwm = 1512
     else:   
-        calcPwm = float(7.77777 * position)
+        calcPwm = float(11.111111 * position)
         newPwm = int(calcPwm) + 825
         pwm = newPwm
 
