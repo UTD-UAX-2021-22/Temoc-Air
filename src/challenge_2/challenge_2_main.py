@@ -131,10 +131,10 @@ async def mainFunc():
     # Order: Bottom left -> Top Left -> Top Right -> Bottom Right   ---  This is VERY important to have right
     # Units in yards
     field_corners_y = np.array([
-        [-53.333/2, 0, 0],
-        [-53.333/2, 25, 0],
-        [53.333/2, 25, 0],
-        [53.333/2, 0, 0]
+        [-53.333/4, 0, 0],
+        [-53.333/4, 50, 0],
+        [53.333/4, 50, 0],
+        [53.333/4, 0, 0]
     ])
 
     # Allocate space in a numpy array for home position in UTM coords
