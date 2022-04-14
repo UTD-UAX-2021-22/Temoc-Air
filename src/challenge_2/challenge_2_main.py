@@ -9,7 +9,7 @@ from tqdm import tqdm
 #import chall2_test
 #print(vars(chall2_test))
 #import GeneralDroneFunctions
-dummyDrone = False # Set to True to bench test and not connect to real drone, False for actual flights
+dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     import DummyGeneralFunctions as gd    
 else:
@@ -55,6 +55,9 @@ async def mainFunc():
     #bridge = CvBridge()
     fcam_info = [c for c in vehicle_info.cameras if c.name == "Forward Camera"][0]
     down_cam_info = [c for c in vehicle_info.cameras if c.name == "Downward Camera"][0]
+    fcam_angle = fcam_info.rotation[1] 
+    dcam_angle = down_cam_info.rotation[1]
+    print("Camera angles are F: " + str(fcam_angle) + " and D: " + str(dcam_angle))
     max_frame_fails = 30
     logger.debug(f"Loading template image {args.template}")
     logo_template_image = cv2.imread(args.template)
@@ -164,7 +167,7 @@ async def mainFunc():
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
-        gd.ServoMovement(vehicle, 90-50)
+        gd.ServoMovement(vehicle, 90+fcam_angle)
         async def liftOffAndMoveToCenter():
             print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62)
@@ -191,7 +194,7 @@ async def mainFunc():
                 await asyncio.sleep(4)
 
     logo_found = False
-    gd.ServoMovement(vehicle, 90-50)
+    gd.ServoMovement(vehicle, 90+fcam_angle)
     # err = cam.grab(status)
     # if err != sl.ERROR_CODE.SUCCESS:
     #     print(repr(err))
@@ -272,7 +275,7 @@ async def mainFunc():
         path = Utils.calculateVisitPath(geoTracker.getPOIs(), np.array([start_x, start_y]))
         logger.debug("Cam start")
         #NEED SERVO MOVEMENT HERE
-        gd.ServoMovement(vehicle, 0)
+        gd.ServoMovement(vehicle, 90+dcam_angle)
         err = cam.grab(status)
         telem_logger.writeValues(frame_count=frame_count)
         frame_count += 1
