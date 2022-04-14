@@ -95,7 +95,7 @@ async def mainFunc():
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
-        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSUR, 5) # (0, 100) % of camera frame rate. -1 sets it to auto
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 60) # (0, 100) % of camera frame rate. -1 sets it to auto
         cam.set_camera_settings(sl.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
         cam.set_camera_settings(sl.VIDEO_SETTINGS.WHITEBALANCE_TEMPERATURE, -1) #(2800, 6500), -1 is auto
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
@@ -132,8 +132,8 @@ async def mainFunc():
     # Units in yards
     field_corners_y = np.array([
         [-53.333/2, 0, 0],
-        [-53.333/2, 50, 0],
-        [53.333/2, 50, 0],
+        [-53.333/2, 25, 0],
+        [53.333/2, 25, 0],
         [53.333/2, 0, 0]
     ])
 
