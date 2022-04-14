@@ -322,21 +322,33 @@ def SetConditionYaw(vehicle, heading, relative = False, speed = 60):
     vehicle.send_mavlink(msg)
 
 def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
+    # msg = vehicle.message_factory.landing_target_encode(
+    #     0,          # time target data was processed, as close to sensor capture as possible
+    #     1,          # target num, not used
+    #     mavutil.mavlink.MAV_FRAME_BODY_NED, # frame, not used
+    #     -x * math.pi / 180.0,          # X-axis angular offset, in radians
+    #     -y * math.pi / 180.0,          # Y-axis angular offset, in radians
+    #     z,          # distance, in meters
+    #     0,          # Target x-axis size, in radians
+    #     0,          # Target y-axis size, in radians
+    #     0,          # x	float	X Position of the landing target on MAV_FRAME
+    #     0,          # y	float	Y Position of the landing target on MAV_FRAME
+    #     0,          # z	float	Z Position of the landing target on MAV_FRAME
+    #     (1,0,0,0),  # q	float[4]	Quaternion of landing target orientation (w, x, y, z order, zero-rotation is 1, 0, 0, 0)
+    #     2,          # type of landing target: 2 = Fiducial marker
+    #     1,          # position_valid boolean
+    # )
     msg = vehicle.message_factory.landing_target_encode(
-        0,          # time target data was processed, as close to sensor capture as possible
+        0,          # time since system boot, not used
         1,          # target num, not used
         mavutil.mavlink.MAV_FRAME_BODY_NED, # frame, not used
+        # (x-horizontal_resolution/2)*horizontal_fov/horizontal_resolution,
+        # (y-vertical_resolution/2)*vertical_fov/vertical_resolution,
         -x * math.pi / 180.0,          # X-axis angular offset, in radians
         -y * math.pi / 180.0,          # Y-axis angular offset, in radians
         z,          # distance, in meters
         0,          # Target x-axis size, in radians
-        0,          # Target y-axis size, in radians
-        0,          # x	float	X Position of the landing target on MAV_FRAME
-        0,          # y	float	Y Position of the landing target on MAV_FRAME
-        0,          # z	float	Z Position of the landing target on MAV_FRAME
-        (1,0,0,0),  # q	float[4]	Quaternion of landing target orientation (w, x, y, z order, zero-rotation is 1, 0, 0, 0)
-        2,          # type of landing target: 2 = Fiducial marker
-        1,          # position_valid boolean
+        0           # Target y-axis size, in radians
     )
     vehicle.send_mavlink(msg)
     vehicle.message_factory
