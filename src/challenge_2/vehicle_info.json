@@ -4,10 +4,10 @@
         "name": "Forward Camera",
         "id": -1,
         "position": [0.13, 0, 0.2],
-        "rotation": [0, -35, 0],
+        "rotation": [0, -50, 0],
         "hfov": 110,
         "vfov": 70,
-        "resolution": [1280, 720]
+        "resolution": [1920, 1080]
       },
       {
         "name": "Downward Camera",
@@ -16,7 +16,7 @@
         "rotation": [0, -90, 0],
         "hfov": 110,
         "vfov": 70,
-        "resolution": [1280, 720]
+        "resolution": [1920, 1080]
       }
     ]
   }

@@ -9,7 +9,7 @@ from tqdm import tqdm
 #import chall2_test
 #print(vars(chall2_test))
 #import GeneralDroneFunctions
-dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
+dummyDrone = False # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     import DummyGeneralFunctions as gd    
 else:
@@ -95,7 +95,7 @@ async def mainFunc():
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
-        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 60) # (0, 100) % of camera frame rate. -1 sets it to auto
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, .01) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
         cam.set_camera_settings(sl.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
         cam.set_camera_settings(sl.VIDEO_SETTINGS.WHITEBALANCE_TEMPERATURE, -1) #(2800, 6500), -1 is auto
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
@@ -164,10 +164,10 @@ async def mainFunc():
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
-        gd.ServoMovement(vehicle, 90-35)
+        gd.ServoMovement(vehicle, 90-50)
         async def liftOffAndMoveToCenter():
             print("Takeoff")
-            await gd.TakeOffDrone(vehicle, 7.62*1.5)
+            await gd.TakeOffDrone(vehicle, 7.62)
             print("Goto body")
             await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
             print("Finished Liftoff and Move to Center")
@@ -191,7 +191,7 @@ async def mainFunc():
                 await asyncio.sleep(4)
 
     logo_found = False
-    gd.ServoMovement(vehicle, 90-35)
+    gd.ServoMovement(vehicle, 90-50)
     # err = cam.grab(status)
     # if err != sl.ERROR_CODE.SUCCESS:
     #     print(repr(err))
@@ -202,7 +202,7 @@ async def mainFunc():
     with MissionContext("POI Search"):
         # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
         fail_count = 0
-        rotate_time = 15
+        rotate_time = 26
         spin_started = False
          # Command the vehicle to rotate 360 degrees over 12 seconds
         rot_start_time = 0
