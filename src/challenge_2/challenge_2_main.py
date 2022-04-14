@@ -47,7 +47,7 @@ async def mainFunc():
     parser = argparse.ArgumentParser(description="Test logo detection")
     # parser.add_argument('video_input_path', default="rtsp://192.168.137.234:8080/video/h264", nargs='?')
     # parser.add_argument('--video', default="mavic_test_11_12_closeup.mp4", nargs='?')
-    parser.add_argument('--template', default="logo_template_2.png",  nargs='?')
+    parser.add_argument('--template', default="logo_template_final_medium.png",  nargs='?')
     args = parser.parse_args()
 
     # Load vehicle information. Currently contains only camera data
