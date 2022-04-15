@@ -18,7 +18,7 @@ sys.path.append('/home/apsync/.local/lib/python3.7/site-packages/')
 
 # Set MAVLink protocol to 2.
 import os
-os.environ["MAVLINK20"] = "1"
+os.environ["MAVLINK20"] = "2"
 
 # Import the libraries
 import numpy as np
@@ -53,6 +53,8 @@ import socket
 # if you are using mavlink_router include the IP address for the ROS connection here
 
 connection_string_default = '127.0.0.1:14855'
+
+# Ideal baudrate for Mission Planner
 connection_baudrate_default = 1500000
 
 # Use this to rotate all processed data
@@ -109,8 +111,8 @@ increment_f  = None
 distances = np.ones((distances_array_length,), dtype=np.uint16) * (2000 + 1)
 # Obstacle distances in nine segments for the new OBSTACLE_DISTANCE_3D message
 # see here https://github.com/rishabsingh3003/Vision-Obstacle-Avoidance/blob/land_detection_final/Companion_Computer/d4xx_to_mavlink_3D.py
-mavlink_obstacle_coordinates = np.ones((9,3), dtype = np.float) * (9999)
-dist_debug = np.ones((9), dtype = np.float)
+mavlink_obstacle_coordinates = np.ones((9,3), dtype = float) * (9999)
+dist_debug = np.ones((9), dtype = float)
 debug_enable = 1
 
 ######################################################
@@ -336,24 +338,24 @@ def fltmode_msg_callback(value):
 # Listen to ZED ROS node for SLAM data
 def zed_dist_callback(msg):
     global distances, angle_offset, increment_f, min_depth_cm, max_depth_cm
-    distances=np.array([i*100 for i in msg.ranges]).astype(int)
-    min_depth_cm=int(msg.range_min*100)
-    max_depth_cm=int(msg.range_max*100)
-    increment_f=msg.angle_increment
+    distances = np.array([i * 100 for i in msg.ranges]).astype(int)
+    min_depth_cm = int(msg.range_min * 100)
+    max_depth_cm = int(msg.range_max * 100)
+    increment_f = msg.angle_increment
     # there appears to be a defect in the obstacle_distance function in Arducopter 4.0.x
     # so we need to set the offset manually and cant take the correct calculated increment
     if (ac_version_41 == False):
-        increment_f=1.6
-    angle_offset=msg.angle_min
+        increment_f = 1.6
+    angle_offset = msg.angle_min
 
 def zed_9sector_callback(msg):
     global mavlink_obstacle_coordinates, min_depth_cm, max_depth_cm
-    min_depth_cm=int(msg.channels[0].values[0]*100)
-    max_depth_cm=int(msg.channels[0].values[1]*100)
+    min_depth_cm = int(msg.channels[0].values[0] * 100)
+    max_depth_cm = int(msg.channels[0].values[1] * 100)
     for j in range(9):
         mavlink_obstacle_coordinates[j][0] = msg.points[j].z
         mavlink_obstacle_coordinates[j][1] = (msg.points[j].x)
-        mavlink_obstacle_coordinates[j][2] = (-1*msg.points[j].y)
+        mavlink_obstacle_coordinates[j][2] = (-1 * msg.points[j].y)
         #dist_debug[j] = m.sqrt(mavlink_obstacle_coordinates[j][0] * mavlink_obstacle_coordinates[j][0] + mavlink_obstacle_coordinates[j][1] * mavlink_obstacle_coordinates[j][1] + mavlink_obstacle_coordinates[j][2] * mavlink_obstacle_coordinates[j][2])
     print("\033c")
     #print(min_depth_cm, max_depth_cm)

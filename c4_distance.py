@@ -1,4 +1,3 @@
-from tkinter import Image
 import pyzed.sl as stereolabs
 import math
 import cv2
@@ -12,7 +11,8 @@ from multiprocessing import Process
 import rospy
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
-from sensor_msgs.msg import LaserScan, PointCloud
+from sensor_msgs.msg import LaserScan, PointCloud, ChannelFloat32
+from geometry_msgs.msg import Point32
 
 
 # from dronekit import connect, mavutil, VehicleMode
@@ -24,12 +24,21 @@ FRONT_AVOID_DISTANCE = 2.5 # In meters, if any object is within this distance in
 PERPENDICULAR_LENGTH = 0.5 # In meters, the length of the copter from the bottom to the top with leeway to determine the height dimensions needed to be checked in the depth map
 WIDTH_AVOID_DISTANCE = 1.2 + 0.3 # The distance from the center of the copter to the blade + leeway (0.3 meters?) if it's not 
 FORWARD_VELECOTY = 5 # This value is just random right now but it is the velocity in the flat north direction
-DISTANCES_ARRAY_LENGTH = 72 # Obstacle distances in front of the stereo camera from left to right
-DEPTH_RANGE_M = [0.5, 10.0] # Range for the ZED camera meters, currently testing a min distance of 0.5 meters
 ERROR_MARGIN = 0.45 # Error margin from copter in meters
+
+# Obstacle distances in front of the sensor, starting from the left in increment degrees to the right
+# See here: https://mavlink.io/en/messages/common.html#OBSTACLE_DISTANCE
+DISTANCES_ARRAY_LENGTH = 72 # Obstacle distances in front of the stereo camera from left to right
+ANGLE_OFFSET = 0
+INCREMENT_L  = 0
+
+# Sensor Params
+DEPTH_RANGE_M = [0.5, 10.0] # Range for the ZED camera meters, currently testing a min distance of 0.5 meters
+DEPTH_HFOV_DEG = 86
 
 # 
 zed = stereolabs.Camera() # Create a Camera object for interacting with the ZED
+
 sector_obstacle_coordinates = np.ones((9,3), dtype = float) * (9999)
 distances = np.ones((DISTANCES_ARRAY_LENGTH), dtype = float)
 closests_distances = []
@@ -78,7 +87,16 @@ def get_object_depth(depth, bounds):
         y_min = min(y_vect)
         z_min = min(z_vect)
 
-        log.info(f"(x, y, z) = ({x_min}, {y_min}, {z_min})")
+        # cur_max = 99999
+        # for val in rnage(0, len(z_vect) - 1):
+        #     cur_distance = math.sqrt(x * x + y * y + z * z)
+        #     if cur_distance < cur_max:
+        #         x_min = x_vect[val]
+        #         y_min = y_vect[val]
+        #         z_min = z_vect[val]
+
+        # print(f"(x, y, z) = ({x_min}, {y_min}, {z_min})")
+        
     except Exception:
         x_min = ERROR_MARGIN
         y_min = ERROR_MARGIN
@@ -106,10 +124,10 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
             distances[i] = dist_m
         elif dist_m < min_depth_m:
             distances[i] = 0
-        elif dist_m >= max_depth_m or np.isnan(dist_m):
+        elif dist_m >= max_depth_m or np.isnan(dist_m) or np.isinf(dist_m):
             distances[i] = 10.01
-        elif np.isinf(dist_m):
-            distances[i] = 655.36
+        # elif np.isinf(dist_m):
+        #     distances[i] = 655.36
 
     # log.info(f"final distances array in m:\n{distances}")
     # print("{}".format(distances), end='\r')
@@ -125,12 +143,14 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
 def depth_sector():
     # Create a InitParameters object and set configuration parameters
     init_params = stereolabs.InitParameters()
-    init_params.depth_mode = stereolabs.DEPTH_MODE.PERFORMANCE  # Use PERFORMANCE depth mode
+    init_params.depth_mode = stereolabs.DEPTH_MODE.PERFORMANCE  # Use PERFORMANCE or QUALITY depth mode
     init_params.coordinate_units = stereolabs.UNIT.METER  # Use meter units (for depth measurements)
     init_params.camera_resolution = stereolabs.RESOLUTION.HD720 # Resolution set to 720p could go up to 1080p
 
     # Open/start the camera and check for initialization errors
     err = zed.open(init_params) 
+    zed.set_camera_settings(stereolabs.VIDEO_SETTINGS.EXPOSURE, 35) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+    zed.set_camera_settings(stereolabs.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
     if err != stereolabs.ERROR_CODE.SUCCESS:
         log.error(repr(err))
         zed.close()
@@ -138,7 +158,7 @@ def depth_sector():
 
     # Create and set RuntimeParameters after opening the camera
     runtime_parameters = stereolabs.RuntimeParameters()
-    runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.STANDARD
+    runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.FILL
     
     # Setting the depth confidence parameters
     runtime_parameters.confidence_threshold = 100
@@ -173,9 +193,9 @@ def depth_sector():
     #Initialize laserscan node
     scan = LaserScan()
     scan.header.frame_id = 'zed_horizontal_scan'
-    scan.angle_min = angle_offset
-    scan.angle_max = depth_hfov_deg/2
-    scan.angle_increment = increment_f
+    scan.angle_min = float(ANGLE_OFFSET)
+    scan.angle_max = DEPTH_HFOV_DEG/2
+    scan.angle_increment = float(INCREMENT_L)
     scan.range_min = DEPTH_RANGE_M[0]
     scan.range_max = DEPTH_RANGE_M[1]
     scan.intensities = []
@@ -196,8 +216,7 @@ def depth_sector():
     # viewer = gl.GLViewer()
     # viewer.init(len(sys.argv), sys.argv, zed.get_camera_information().camera_model, res)
 
-    cur = 0
-    while True: # Capturing 1 images
+    while not rospy.is_shutdown(): # Capturing 1 images
         # A new image is available if grab() returns SUCCESS
         if zed.grab(runtime_parameters) == stereolabs.ERROR_CODE.SUCCESS:
             zed.retrieve_image(sector_mat, stereolabs.VIEW.DEPTH)
@@ -277,6 +296,8 @@ def depth_sector():
                     gy += y_step
                     i += 1
                 gx += x_step
+
+            # print(f"({closests_distances[1]}, {closests_distances[4]}, {closests_distances[7]})")
                 
             # cv2.setWindowProperty("window",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
             cv2.imshow("Distance Grid", image_sector)
@@ -287,20 +308,6 @@ def depth_sector():
                 Point32(x=sector_obstacle_coordinates[j][0],y=sector_obstacle_coordinates[j][1],z=sector_obstacle_coordinates[j][2])
                 for j in range(9)]
             node2.publish(pointcloud)
-            
-            # cur = cur + 1
-
-    # Testing custom velocity vector sending incase the communication link to Mavlink through ROS nodes does not work
-    # if  float(closests_distances[1]) > 1.5 and float(closests_distances[7]) < 1.5 and float(closests_distances[4]) > FRONT_AVOID_DISTANCE:
-    #     print("Continue Going Straight")
-    # elif  float(closests_distances[7]) < FRONT_AVOID_DISTANCE and  float(closests_distances[1]) > FRONT_AVOID_DISTANCE and  float(closests_distances[4]) > FRONT_AVOID_DISTANCE:
-    #     print("Go Left")
-
-    # for j in range(9):
-    #     log.info(f"{sector_obstacle_coordinates[j][0]}" )
-    #log.info(f"Middle 3 sectors of the image {sector_obstacle_coordinates[j][0]} {closests_distances[4]} {closests_distances[7]}")
-    # cv2.imshow("Distance Grid", image_sector)
-    # cv2.waitKey()
             
     # Close all cv2 images
     cv2.destroyAllWindows()
