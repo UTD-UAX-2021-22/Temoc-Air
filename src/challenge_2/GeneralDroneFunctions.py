@@ -356,7 +356,7 @@ def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
 def StartPrecisionLanding(vehicle):
     vehicle.parameters['PLND_ENABLED'] = 1 # Enable precision landing
     vehicle.parameters['PLND_TYPE'] = 1 # Optical fiducial tracking
-    vehicle.parameters['ANGLE_MAX'] = 4*100 # Angle in centidegress
+    vehicle.parameters['ANGLE_MAX'] = 2.5*1000 # Angle in centidegress
     vehicle.mode = VehicleMode("LAND")
 
 def SetROI(loc):

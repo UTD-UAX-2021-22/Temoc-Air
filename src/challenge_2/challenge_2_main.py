@@ -98,7 +98,7 @@ async def mainFunc():
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
-        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, .01) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 2.5) # overcast darkish day 2.2-3.5 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
         cam.set_camera_settings(sl.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
         cam.set_camera_settings(sl.VIDEO_SETTINGS.WHITEBALANCE_TEMPERATURE, -1) #(2800, 6500), -1 is auto
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
@@ -163,7 +163,7 @@ async def mainFunc():
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
         if dummyDrone == False:
-            vehicle.parameters['ANGLE_MAX'] = 30*100 # Angle in centidegress TODO REANABLE FOR FLIGHT
+            vehicle.parameters['ANGLE_MAX'] = 3*1000 # Angle in centidegress TODO REANABLE FOR FLIGHT
         await asyncio.sleep(5)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
@@ -176,7 +176,7 @@ async def mainFunc():
             print("Finished Liftoff and Move to Center")
             
         lft_off_task = asyncio.create_task(liftOffAndMoveToCenter())
-        await asyncio.sleep(5)
+        await asyncio.sleep(8)
 
     # print(f"Coords lat: {coords_lat}")
     visitCorners = False
@@ -284,6 +284,7 @@ async def mainFunc():
             exit(1)
         # runtime = sl.RuntimeParameters()
         # imageSize = sl.get_camera_information().camera_resolution
+        zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C1)
         # zedImage = sl.Mat(imageSize.width, imageSize.height, sl.MAT_TYPE.U8_C4) 
         #cam_down.subscribe()
         logger.debug("Visit start")
@@ -308,6 +309,7 @@ async def mainFunc():
                         cv2.imshow('Downward Camera', img)
                         cv2.waitKey(1)
                     if logo_found:
+                        #print("Logo Found")
                         break
             
             if logo_found:
@@ -331,7 +333,7 @@ async def mainFunc():
             #frame_status, img = (True, bridge.imgmsg_to_cv2(rospy.wait_for_message('/iris_demo/camera/image_raw',Image), desired_encoding="bgr8")) # Acquire image from front camera
             err = cam.grab(status)
             telem_logger.writeValues(frame_count=frame_count)
-            frame_count += 1         
+            frame_count += 1   
             if err == sl.ERROR_CODE.SUCCESS:
                 ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
                 frame_status = True
