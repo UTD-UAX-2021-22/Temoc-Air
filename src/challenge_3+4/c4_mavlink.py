@@ -1,24 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.9
 
-
-######################################################
-##  ROS LidarScan node to MAVLink                   ##
-######################################################
-# Stephan Schindewolf 04/2021
-# pls check that you have the following installed:
-#   pip3 install pymavlink
-#   pip3 install apscheduler
-#   pip3 install pyserial
+# might have to install newer version of pymavlink -> pymavlink5
 
 import sys
-sys.path.append("/usr/local/lib/")
-sys.path.append("/usr/include/")
-sys.path.append("/usr/share/")
-sys.path.append('/home/apsync/.local/lib/python3.7/site-packages/')
 
 # Set MAVLink protocol to 2.
 import os
-os.environ["MAVLINK20"] = "2"
+os.environ["MAVLINK20"] = "1"
 
 # Import the libraries
 import numpy as np
@@ -29,6 +17,7 @@ import time
 import argparse
 import threading
 import json
+from dronekit import connect
 from time import sleep
 from apscheduler.schedulers.background import BackgroundScheduler
 from pymavlink import mavutil
@@ -36,13 +25,8 @@ import rospy
 from sensor_msgs.msg import LaserScan, PointCloud, ChannelFloat32
 from geometry_msgs.msg import Point32
 
-
 # To obtain ip address
 import socket
-
-######################################################
-##  ArduPilot-related parameters - reconfigurable   ##
-######################################################
 
 # Default configurations for connection to the FCU
 # Decide which board you are using to connect to the flight controller via mavlink:
@@ -52,10 +36,12 @@ import socket
 # connection_string_default=/dev/ttyTHS1
 # if you are using mavlink_router include the IP address for the ROS connection here
 
-connection_string_default = '127.0.0.1:14855'
+connection_string_default = "/dev/ttyTHS2" #'127.0.0.1:14855'
 
 # Ideal baudrate for Mission Planner
-connection_baudrate_default = 1500000
+connection_baudrate_default = 57600
+
+#vehicle = connect(connection_string_default, wait_ready=300, baud=connection_baudrate_default)
 
 # Use this to rotate all processed data
 camera_facing_angle_degree = 0
@@ -68,8 +54,9 @@ enable_msg_obstacle_distance = False
 enable_3D_msg_obstacle_distance = False
 enable_msg_distance_sensor = False
 obstacle_distance_msg_hz_default = 15.0
-curr_avoid_strategy=""
-prev_avoid_strategy=""
+curr_avoid_strategy = ""
+prev_avoid_strategy = ""
+
 # enable only if you are on Arducopter 4.1 or higher
 ac_version_41 = True
 
@@ -81,10 +68,6 @@ mavlink_thread_should_exit = False
 # default exit code is failure - a graceful termination with a
 # terminate signal is possible.
 exit_code = 1
-
-######################################################
-##  Global variables                                ##
-######################################################
 
 # Camera-related variables
 pipe = None
@@ -109,6 +92,7 @@ distances_array_length = 72
 angle_offset = None
 increment_f  = None
 distances = np.ones((distances_array_length,), dtype=np.uint16) * (2000 + 1)
+
 # Obstacle distances in nine segments for the new OBSTACLE_DISTANCE_3D message
 # see here https://github.com/rishabsingh3003/Vision-Obstacle-Avoidance/blob/land_detection_final/Companion_Computer/d4xx_to_mavlink_3D.py
 mavlink_obstacle_coordinates = np.ones((9,3), dtype = float) * (9999)
@@ -161,11 +145,7 @@ if not obstacle_distance_msg_hz:
 else:
     progress("INFO: Using obstacle_distance_msg_hz %s" % obstacle_distance_msg_hz)
 
-
-
-######################################################
-##  Functions - MAVLink                             ##
-######################################################
+###  MAVLink Functions ###
 
 def mavlink_loop(conn, callbacks):
     '''a main routine for a thread; reads data from a mavlink connection,
@@ -214,7 +194,7 @@ def send_obstacle_distance_message():
             current_time_us = int(round(time.time() * 1000000))
 
 
-# https://mavlink.io/en/messages/common.html#DISTANCE_SENSOR
+# # https://mavlink.io/en/messages/common.html#DISTANCE_SENSOR
 def send_distance_sensor_message():
     global distances
     # Average out a portion of the centermost part
@@ -289,7 +269,8 @@ def fltmode_msg_callback(value):
     global distances, ac_version_41
     dist_arr=[0]*72
     curr_flight_mode = (value.base_mode, value.custom_mode)
-    # print(curr_flight_mode)
+    print("flight mode")
+    print(curr_flight_mode)
     if ((curr_flight_mode[1] == 5) or (curr_flight_mode[1] == 2)): # Loiter and AltHold only
         curr_avoid_strategy="simple_avoid"
         if (curr_avoid_strategy != prev_avoid_strategy):
@@ -356,8 +337,8 @@ def zed_9sector_callback(msg):
         mavlink_obstacle_coordinates[j][0] = msg.points[j].z
         mavlink_obstacle_coordinates[j][1] = (msg.points[j].x)
         mavlink_obstacle_coordinates[j][2] = (-1 * msg.points[j].y)
-        #dist_debug[j] = m.sqrt(mavlink_obstacle_coordinates[j][0] * mavlink_obstacle_coordinates[j][0] + mavlink_obstacle_coordinates[j][1] * mavlink_obstacle_coordinates[j][1] + mavlink_obstacle_coordinates[j][2] * mavlink_obstacle_coordinates[j][2])
-    print("\033c")
+        dist_debug[j] = m.sqrt(mavlink_obstacle_coordinates[j][0] * mavlink_obstacle_coordinates[j][0] + mavlink_obstacle_coordinates[j][1] * mavlink_obstacle_coordinates[j][1] + mavlink_obstacle_coordinates[j][2] * mavlink_obstacle_coordinates[j][2])
+    #print("\033c")
     #print(min_depth_cm, max_depth_cm)
     #print (mavlink_obstacle_coordinates)
     #print (dist_debug)
@@ -373,8 +354,8 @@ conn = mavutil.mavlink_connection(
     autoreconnect = True,
     source_system = 1,
     source_component = 93,
-    baud=connection_baudrate,
-    force_connected=True,
+    baud = connection_baudrate,
+    force_connected = True,
 )
 
 send_msg_to_gcs('Connecting to ROS node...')

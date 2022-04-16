@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.9
 
 import pyzed.sl as stereolabs
 import math
@@ -7,6 +7,7 @@ import sys
 import statistics
 import numpy as np
 import logging
+from dronekit import connect
 from multiprocessing import Process
 
 # ROS Imports
@@ -31,8 +32,8 @@ ERROR_MARGIN = 0.45 # Error margin from copter in meters
 # Obstacle distances in front of the sensor, starting from the left in increment degrees to the right
 # See here: https://mavlink.io/en/messages/common.html#OBSTACLE_DISTANCE
 DISTANCES_ARRAY_LENGTH = 72 # Obstacle distances in front of the stereo camera from left to right
-ANGLE_OFFSET = 0
-INCREMENT_L  = 0
+angle_offset = 0
+increment_l = 0
 
 # Sensor Params
 DEPTH_RANGE_M = [0.5, 10.0] # Range for the ZED camera meters, currently testing a min distance of 0.5 meters
@@ -40,10 +41,11 @@ DEPTH_HFOV_DEG = 86
 
 # 
 zed = stereolabs.Camera() # Create a Camera object for interacting with the ZED
+# vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=57600)
 
-sector_obstacle_coordinates = np.ones((9,3), dtype = float) * (9999)
+sector_obstacle_coordinates = np.ones((9,3), dtype = float) * 9999
 distances = np.ones((DISTANCES_ARRAY_LENGTH), dtype = float)
-closests_distances = []
+closests_distances = np.array([100, 100, 100, 100, 100, 100, 100, 100, 100])
 
 # Setup logger file
 log_file = logging.FileHandler("challenge4.log")
@@ -59,7 +61,7 @@ log.addHandler(log_file)
     Last Edit: 4/12/2022
     By: Sean Njenga
     
-    Calculates the smallest x, y, z position for a sector in the point_cloud image
+    Calculates the min x, y, z position for a sector in the point_cloud image
 
     depth: Point cloud data of whole frame.
     bounds: Bounding box for object in pixels.
@@ -68,7 +70,7 @@ log.addHandler(log_file)
         bounds[2]: width of bounding box.
         bounds[3]: height of bounding box.
 """
-def get_object_depth(depth, bounds):
+def get_object_depth(depth, bounds, i):
     area_div = 2
 
     x_vect = []
@@ -85,19 +87,25 @@ def get_object_depth(depth, bounds):
                 y_vect.append(depth[i, j, 1])
                 z_vect.append(z)
     try:
-        x_min = min(x_vect)
-        y_min = min(y_vect)
-        z_min = min(z_vect)
+        # x_min = min(x_vect)
+        # y_min = min(y_vect)
+        # z_min = min(z_vect)
+        min_dis = []
+
+        x_min = 0
+        z_min = 0
+        y_min = 0
 
         # cur_max = 99999
-        # for val in rnage(0, len(z_vect) - 1):
-        #     cur_distance = math.sqrt(x * x + y * y + z * z)
-        #     if cur_distance < cur_max:
-        #         x_min = x_vect[val]
-        #         y_min = y_vect[val]
-        #         z_min = z_vect[val]
+        for val in range(0, len(z_vect) - 1):
+            cur_distance = math.sqrt(x_vect[val] * x_vect[val] + y_vect[val] * y_vect[val] + z_vect[val] * z_vect[val])
+            min_dis[val] = cur_distance
 
-        # print(f"(x, y, z) = ({x_min}, {y_min}, {z_min})")
+        print(min(min_dis))
+        index = min_dis.index(min(min_dis))
+        x_min = x_vect[index]
+        z_min = y_vact[index]
+        y_min = z_vect[index]
         
     except Exception:
         x_min = ERROR_MARGIN
@@ -126,10 +134,10 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
             distances[i] = dist_m
         elif dist_m < min_depth_m:
             distances[i] = 0
-        elif dist_m >= max_depth_m or np.isnan(dist_m) or np.isinf(dist_m):
+        elif dist_m >= max_depth_m or np.isnan(dist_m):
             distances[i] = 10.01
-        # elif np.isinf(dist_m):
-        #     distances[i] = 655.36
+        elif np.isinf(dist_m):
+            distances[i] = 655.36
 
     # log.info(f"final distances array in m:\n{distances}")
     # print("{}".format(distances), end='\r')
@@ -145,13 +153,13 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
 def depth_sector():
     # Create a InitParameters object and set configuration parameters
     init_params = stereolabs.InitParameters()
-    init_params.depth_mode = stereolabs.DEPTH_MODE.PERFORMANCE  # Use PERFORMANCE or QUALITY depth mode
+    init_params.depth_mode = stereolabs.DEPTH_MODE.QUALITY  # Use PERFORMANCE or QUALITY depth mode
     init_params.coordinate_units = stereolabs.UNIT.METER  # Use meter units (for depth measurements)
     init_params.camera_resolution = stereolabs.RESOLUTION.HD720 # Resolution set to 720p could go up to 1080p
 
     # Open/start the camera and check for initialization errors
-    err = zed.open(init_params) 
-    zed.set_camera_settings(stereolabs.VIDEO_SETTINGS.EXPOSURE, 35) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+    err = zed.open(init_params)
+    zed.set_camera_settings(stereolabs.VIDEO_SETTINGS.EXPOSURE, 70) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
     zed.set_camera_settings(stereolabs.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
     if err != stereolabs.ERROR_CODE.SUCCESS:
         log.error(repr(err))
@@ -171,6 +179,8 @@ def depth_sector():
     height = round(zed.get_camera_information().camera_resolution.height / 2)
     res_params.width = width
     res_params.height = height
+    angle_offset = float(0 - (DEPTH_HFOV_DEG / 2))
+    increment_f = float(DEPTH_HFOV_DEG / DISTANCES_ARRAY_LENGTH)
 
     # Initialze the matrix's for analysis
     image_mat = stereolabs.Mat()
@@ -190,9 +200,9 @@ def depth_sector():
     #Initialize laserscan node
     scan = LaserScan()
     scan.header.frame_id = 'zed_horizontal_scan'
-    scan.angle_min = float(ANGLE_OFFSET)
+    scan.angle_min = angle_offset
     scan.angle_max = DEPTH_HFOV_DEG/2
-    scan.angle_increment = float(INCREMENT_L)
+    scan.angle_increment = float(increment_l)
     scan.range_min = DEPTH_RANGE_M[0]
     scan.range_max = DEPTH_RANGE_M[1]
     scan.intensities = []
@@ -207,12 +217,6 @@ def depth_sector():
     pointcloud.header.frame_id ='zed_9_sector_scan'
     pointcloud.channels = [channel]
 
-    # End ROS Stuff
-    #############################################################################################################################
-   
-    # viewer = gl.GLViewer()
-    # viewer.init(len(sys.argv), sys.argv, zed.get_camera_information().camera_model, res)
-
     while not rospy.is_shutdown(): # Capturing 1 images
         # A new image is available if grab() returns SUCCESS
         if zed.grab(runtime_parameters) == stereolabs.ERROR_CODE.SUCCESS:
@@ -222,13 +226,14 @@ def depth_sector():
             # Retrieve depth map. Depth is aligned on the left image
             # zed.retrieve_measure(depth, stereolabs.MEASURE.DEPTH)
             
-            zed.retrieve_measure(point_cloud_mat, stereolabs.MEASURE.XYZ)
+            zed.retrieve_measure(point_cloud_mat, stereolabs.MEASURE.XYZRGBA)
             depth = point_cloud_mat.get_data()
             distances_from_depth_image(point_cloud_mat, distances, DEPTH_RANGE_M[0], DEPTH_RANGE_M[1], width, height, OBSTACLE_LINE_THICKNESS)
             scan.ranges = distances
-            distance_center = np.mean(distances[34:38])
 
             #publish distance information for mavros node
+            log.info(f"Print Scan: {scan}")
+            # print(f"Print Scan: {scan}")
             node1.publish(scan)
             
             # create 9 sector image with distance information
@@ -261,14 +266,14 @@ def depth_sector():
                 sector[0] = x_step / 2 + gx
                 
                 # calculate depth of closest object in sector
-                x, y, z = get_object_depth(depth, sector)
+                x, y, z = get_object_depth(depth, sector, i)
                 sector_obstacle_coordinates[i][0] = x
                 sector_obstacle_coordinates[i][1] = y
                 sector_obstacle_coordinates[i][2] = z
                 # cv2.circle(image_sector, (int(x + x_step / 2 + gx), int(y + y_step / 2 + gy)), 2, (0, 255, 0), 2)
                 distance = math.sqrt(x * x + y * y + z * z) - ERROR_MARGIN
                 distance = "{:.2f}".format(distance)
-                closests_distances.append(distance)
+                #closests_distances.append(distance)
                 cv2.putText(image_sector, " " +  (str(distance) + " m"),
                             ((gx + 10), (gy + y_step - 10)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
@@ -279,13 +284,13 @@ def depth_sector():
                     sector[1] = y_step / 2 + gy
             
                     # calculate depth of closest object in sector
-                    x, y, z = get_object_depth(depth, sector)
+                    x, y, z = get_object_depth(depth, sector, i)
                     sector_obstacle_coordinates[i][0] = x
                     sector_obstacle_coordinates[i][1] = y
                     sector_obstacle_coordinates[i][2] = z
                     distance = math.sqrt(x * x + y * y + z * z) - ERROR_MARGIN
                     distance = "{:.2f}".format(distance)
-                    closests_distances.append(distance)
+                    #closests_distances.append(distance)
                     # cv2.circle(image_sector, (int(x + x_step / 2), int(y + y_step / 2)), 3, (0, 255, 0), 2)
                     cv2.putText(image_sector, " " +  (str(distance) + " m"),
                                 ((gx + 10), (gy + y_step - 10)),
@@ -299,6 +304,10 @@ def depth_sector():
             # cv2.setWindowProperty("window",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
             cv2.imshow("Distance Grid", image_sector)
             cv2.waitKey(1)
+
+            for j in range(9):
+                # print(f"{sector_obstacle_coordinates[j][0]}, {sector_obstacle_coordinates[j][1]}, {sector_obstacle_coordinates[j][2]})")
+                log.info(f"{sector_obstacle_coordinates[j][0]}, {sector_obstacle_coordinates[j][1]}, {sector_obstacle_coordinates[j][2]})")
                 
             # Send point_cloud data to ROS node
             pointcloud.points = [
