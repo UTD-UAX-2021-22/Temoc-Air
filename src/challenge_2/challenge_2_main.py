@@ -172,7 +172,8 @@ async def mainFunc():
             print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62)
             print("Goto body")
-            await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
+            await.gd.GoToGlobal(vehicle, new_pos) #may work who knows
+            # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
             print("Finished Liftoff and Move to Center")
             
         lft_off_task = asyncio.create_task(liftOffAndMoveToCenter())
