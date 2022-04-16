@@ -1,0 +1,75 @@
+version: '2.2'
+
+services:
+  zed-node:
+    image: zed-publisher:latest
+    container_name: zed-core
+    privileged: true
+#    environment:
+#      - ROS_HOSTNAME=zed-core
+#      - ROS_MASTER_URI=http://ros-core:11311
+    network_mode: host
+    volumes:
+       - /usr/local/zed/resources:/usr/local/zed/resources
+    depends_on:
+      - ros-core
+    command:
+      - roslaunch
+      - --wait
+      - zed_wrapper
+      - zed2.launch
+
+  ros-core:
+    image: gramaziokohler/ros-noetic-moveit
+    container_name: ros-core
+    network_mode: host
+#    ports:
+#      - "11311:11311"
+    command:
+      - roscore
+
+  ros-bridge:
+    image: gramaziokohler/ros-noetic-moveit
+    container_name: ros-bridge
+    environment:
+      - "ROS_HOSTNAME=ros-bridge"
+      - "ROS_MASTER_URI=http://ros-core:11311"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - ros-core
+    command:
+      - roslaunch
+      - --wait
+      - rosbridge_server
+      - rosbridge_websocket.launch
+
+  ros-viewer:
+    image: osrf/ros:melodic-desktop-full
+    container_name: ros-viewer
+    environment:
+      - "ROS_HOSTNAME=ros-viewer"
+      - "ROS_MASTER_URI=http://ros-core:11311"
+      - "DISPLAY"
+      - "QT_X11_NO_MITSHM=1"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command:
+      - rqt
+     
+
+  ros-fileserver:
+    image: gramaziokohler/ros-noetic-moveit
+    container_name: ros-fileserver
+    environment:
+      - ROS_HOSTNAME=ros-fileserver
+      - ROS_MASTER_URI=http://ros-core:11311
+    depends_on:
+      - ros-core
+    command:
+      - roslaunch
+      - --wait
+      - file_server
+      - file_server.launch
+
+
