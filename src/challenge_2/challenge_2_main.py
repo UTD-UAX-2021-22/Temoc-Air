@@ -157,7 +157,8 @@ async def mainFunc():
         new_pos = base_pos + (Rotation.from_euler('Z', [vehicle.heading], degrees=True).apply(y2m(field_corners_y))[:,0:2])
         logger.debug(f"Calculated base UTM {base_pos} with {zl} {zn} ")
         logger.debug(f"Relative field coordinates {Rotation.from_euler('Z', [-vehicle.heading], degrees=True).apply(y2m(field_corners_y))[:,0:2]}")
-        
+        #Calculate middle coords
+        averaged = np.average(new_pos, axis=0) 
         coords_lat = np.zeros((4,2))
         geoTracker = GeoTracker(corners=new_pos)
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
@@ -172,7 +173,7 @@ async def mainFunc():
             print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62)
             print("Goto body")
-            await.gd.GoToGlobal(vehicle, new_pos) #may work who knows
+            await.gd.GoToGlobal(vehicle, averaged) #coords will probably have to be a different format (averaged variable)
             # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
             print("Finished Liftoff and Move to Center")
             
