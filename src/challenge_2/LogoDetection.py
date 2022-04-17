@@ -58,6 +58,7 @@ def detectLogo(img, logo_markers, board, markerSize = 4, totalMarkers=50, draw=T
     # Convert input color image into grayscale
     #TODO: Investigate adaptive thresholding
     # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # img = gray
     # gray = img
     key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
     arucoDict = aruco.Dictionary_get(key)
@@ -145,7 +146,7 @@ class LogoDetector:
         pass
 
     def processFrame(self, vehicle, frame_bgr) -> Tuple[bool, Any]:
-        logo_detected, det_dict, detType, num_found = detectLogo(frame_bgr, self.template_ids, self.cv_board, draw=False, totalMarkers=250)
+        logo_detected, det_dict, detType, num_found = detectLogo(frame_bgr, self.template_ids, self.cv_board, draw=True, totalMarkers=250)
         if logo_detected:
             h_mat = comp_homograph(det_dict, self.homography_dict)
             # print(np.atleast_2d(np.array(temp_center)))

@@ -68,7 +68,7 @@ async def TakeOffDrone(vehicle, elevation):
 
         if currDroneHeight >= (.95 * elevation):  # If the drone is at the target elevation (account for timing)
             reachedElevation = True
-        asyncio.sleep(1)
+        await asyncio.sleep(1)
     print("Drone has reached target elevation")
     
 
@@ -210,11 +210,13 @@ async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
     await asyncio.sleep(0.25) # Wait to try and avoid reporting move completion prematurely
     while vehicle.groundspeed <= stop_speed:
         # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
+        print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
         # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
         await asyncio.sleep(0.25)
 
     while vehicle.groundspeed > stop_speed:
         # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
+        print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
         # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
         await asyncio.sleep(0.1)
 
@@ -320,21 +322,33 @@ def SetConditionYaw(vehicle, heading, relative = False, speed = 60):
     vehicle.send_mavlink(msg)
 
 def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
+    # msg = vehicle.message_factory.landing_target_encode(
+    #     0,          # time target data was processed, as close to sensor capture as possible
+    #     1,          # target num, not used
+    #     mavutil.mavlink.MAV_FRAME_BODY_NED, # frame, not used
+    #     -x * math.pi / 180.0,          # X-axis angular offset, in radians
+    #     -y * math.pi / 180.0,          # Y-axis angular offset, in radians
+    #     z,          # distance, in meters
+    #     0,          # Target x-axis size, in radians
+    #     0,          # Target y-axis size, in radians
+    #     0,          # x	float	X Position of the landing target on MAV_FRAME
+    #     0,          # y	float	Y Position of the landing target on MAV_FRAME
+    #     0,          # z	float	Z Position of the landing target on MAV_FRAME
+    #     (1,0,0,0),  # q	float[4]	Quaternion of landing target orientation (w, x, y, z order, zero-rotation is 1, 0, 0, 0)
+    #     2,          # type of landing target: 2 = Fiducial marker
+    #     1,          # position_valid boolean
+    # )
     msg = vehicle.message_factory.landing_target_encode(
-        0,          # time target data was processed, as close to sensor capture as possible
+        0,          # time since system boot, not used
         1,          # target num, not used
         mavutil.mavlink.MAV_FRAME_BODY_NED, # frame, not used
+        # (x-horizontal_resolution/2)*horizontal_fov/horizontal_resolution,
+        # (y-vertical_resolution/2)*vertical_fov/vertical_resolution,
         -x * math.pi / 180.0,          # X-axis angular offset, in radians
         -y * math.pi / 180.0,          # Y-axis angular offset, in radians
         z,          # distance, in meters
         0,          # Target x-axis size, in radians
-        0,          # Target y-axis size, in radians
-        0,          # x	float	X Position of the landing target on MAV_FRAME
-        0,          # y	float	Y Position of the landing target on MAV_FRAME
-        0,          # z	float	Z Position of the landing target on MAV_FRAME
-        (1,0,0,0),  # q	float[4]	Quaternion of landing target orientation (w, x, y, z order, zero-rotation is 1, 0, 0, 0)
-        2,          # type of landing target: 2 = Fiducial marker
-        1,          # position_valid boolean
+        0           # Target y-axis size, in radians
     )
     vehicle.send_mavlink(msg)
     vehicle.message_factory
@@ -342,7 +356,7 @@ def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
 def StartPrecisionLanding(vehicle):
     vehicle.parameters['PLND_ENABLED'] = 1 # Enable precision landing
     vehicle.parameters['PLND_TYPE'] = 1 # Optical fiducial tracking
-    vehicle.parameters['ANGLE_MAX'] = 2*100 # Angle in centidegress
+    vehicle.parameters['ANGLE_MAX'] = 2.5*1000 # Angle in centidegress
     vehicle.mode = VehicleMode("LAND")
 
 def SetROI(loc):
@@ -360,6 +374,36 @@ def SetROI(loc):
         )
     # send command to vehicle
     vehicle.send_mavlink(msg)
+	
+def ServoMovement(vehicle, position):
+    
+    if(position <= 0):
+        pwm = 825
+    elif (position >= 90):
+        pwm = 1825
+    # elif(22 <= position  <= 25):
+    #     pwm = 1300
+    # elif(position == 35):
+    #     pwm = 1397
+    # else:
+    #     pwm = 1512
+    else:   
+        calcPwm = float(11.111111 * position)
+        newPwm = int(calcPwm) + 825
+        pwm = newPwm
+
+    msg = vehicle.message_factory.command_long_encode(
+        0, 0,    # target system, target component
+        mavutil.mavlink.MAV_CMD_DO_SET_SERVO, #command
+        0, #confirmation
+        9, pwm , 0, 0, #params 1-4
+        0,
+        0,
+        0
+        )
+    vehicle.send_mavlink(msg)
+
+
 
 """
 ----------------------
