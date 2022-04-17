@@ -172,8 +172,8 @@ async def mainFunc():
         async def liftOffAndMoveToCenter():
             print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62)
-            print("Goto body")
-            await.gd.GoToGlobal(vehicle, averaged) #coords will probably have to be a different format (averaged variable)
+            print("Goto body: " + averaged)
+            await gd.GoToGlobal(vehicle, averaged) #coords will probably have to be a different format (averaged variable)
             # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
             print("Finished Liftoff and Move to Center")
             
