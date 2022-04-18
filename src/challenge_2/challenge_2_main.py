@@ -14,6 +14,12 @@ if dummyDrone == True:
     import DummyGeneralFunctions as gd    
 else:
     import GeneralDroneFunctions as gd #TODO REANABLE FOR FLIGHT
+
+precLoiter = True
+avgHome = False
+if precLoiter and avgHome:
+    sys.exit("Precision Loiter and Average Relative Position homing cannot both be enabled")
+
 from GeneralDroneFunctions import ServoMovement
 from LogoDetection import detectLogo
 from POI import POI_Tracker
@@ -324,9 +330,22 @@ async def mainFunc():
         # gd.GoToTargetBody(vehicle, 0, 0.5, 0) # TODO: Remove. only for testing
         # gd.SetConditionYaw(vehicle, vehicle.heading)
 
+
+        precLoiterTimeStart = 0
+        precLoiterTimeLimit = 10
         fail_count = 0
         # Switch vehicle to landing mode and enable "precision" landing
-        gd.StartPrecisionLanding(vehicle)
+        if not avgHome:
+            gd.StartPrecisionLanding(vehicle)
+        else:
+            gd.Stop(vehicle)
+
+        if precLoiter:
+            vehicle.channels.overrides['15'] = 1900 # Enable precision loiter aux switch
+
+        horizontal_home_done = False
+        logo_relative_avg = np.array([0,0,0])
+        logo_relative_avg_num = 0
         while True:
         # async for ftemp in cam_down.subscribe():
             frame_acq_start = time.time()
@@ -373,12 +392,42 @@ async def mainFunc():
                     telem_logger.writeValues(logo_info=dict(logo_found=logo_found, x_l=logo_center.item(0), y_l=logo_center.item(1),
                         x_lr=logo_position_relative.flatten().item(0), y_lr=logo_position_relative.flatten().item(1),
                         dist=float(np.linalg.norm(logo_position_relative))))
+
+                    if not avgHome and not precLoiter: #Original guidance approach
+                        gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
+
+                    if precLoiter: #Using precision loiter for guidance
+                        if precLoiterTimeStart == 0: #Mark beginning of precision loiter phase
+                            print("Starting precision loiter guidance phase timer")
+                            logger.info("Starting precision loiter guidance phase timer")
+                            precLoiterTimeStart = time.time()
+
+                        gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
+                        
+                        if (time.time() - precLoiterTimeStart) > precLoiterTimeLimit:
+                            print("Ending precision loiter phase")
+                            logger.info("Ending precision loiter phase")
+                            vehicle.channels.overrides['15'] = 1000 # Disable precision loiter aux switch
+
+
+                        
                 
-                    if np.linalg.norm(logo_position_relative*np.array([1,1,0])) < landing_tolerance:
-                        logger.info(f"Horizontal distance of {np.linalg.norm(logo_position_relative)} within {landing_tolerance}m tolerance. Begin Descent")
-                        # gd.LandDrone(vehicle)
+                    if avgHome and not horizontal_home_done:
+                        logo_relative_avg += logo_position_relative
+                        logo_relative_avg_num += 1
+                        logger.debug(f"Averaged logo relative position {logo_relative_avg_num} times")
+                        print(f"Averaged logo relative position {logo_relative_avg_num} times")
+                        if logo_relative_avg_num == 30:
+                            logo_relative_avg = logo_relative_avg / logo_relative_avg_num
+                            logo_relative_avg[2] = 0
+                            logger.info(f"Performing Horizontal homing by {logo_relative_avg[0]} {logo_relative_avg[1]}")
+                            print(f"Performing Horizontal homing by {logo_relative_avg[0]} {logo_relative_avg[1]}")
+                            await gd.MoveRelative(vehicle, logo_relative_avg)
+                            gd.StartPrecisionLanding(vehicle)
+                            horizontal_home_done = True
+                    else:
+                        gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                 
-                    gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                     # gd.MoveRelative(vehicle, logo_position_relative[0, [1,0,2]] * np.array([1, 1, 0])*0.5)
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
                 if dummyDrone == True:

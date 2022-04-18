@@ -359,6 +359,9 @@ def StartPrecisionLanding(vehicle):
     vehicle.parameters['ANGLE_MAX'] = 2.5*1000 # Angle in centidegress
     vehicle.mode = VehicleMode("LAND")
 
+def Stop(vehicle):
+    vehicle.mode = VehicleMode("BRAKE")
+
 def SetROI(loc):
     """ Set ROI command to point camer gimbal at a specified region of interest, drone must also turn to face ROI
     """

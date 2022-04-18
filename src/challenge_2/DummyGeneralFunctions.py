@@ -133,6 +133,9 @@ def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
 def StartPrecisionLanding(vehicle):
     logger.debug("Attempted start precision land")
 
+def Stop(vehicle):
+    logger.debug("Attempted to stop vehicle")
+
 def SetROI(loc):
    logger.debug(f"Attempted set ROI {loc}")
 	
