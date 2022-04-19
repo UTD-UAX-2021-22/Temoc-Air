@@ -27,7 +27,7 @@ FRONT_AVOID_DISTANCE = 2.5 # In meters, if any object is within this distance in
 PERPENDICULAR_LENGTH = 0.5 # In meters, the length of the copter from the bottom to the top with leeway to determine the height dimensions needed to be checked in the depth map
 WIDTH_AVOID_DISTANCE = 1.2 + 0.3 # The distance from the center of the copter to the blade + leeway (0.3 meters?) if it's not 
 FORWARD_VELECOTY = 5 # This value is just random right now but it is the velocity in the flat north direction
-ERROR_MARGIN = 0.45 # Error margin from copter in meters
+ERROR_MARGIN = 0 # Error margin from copter in meters
 
 # Obstacle distances in front of the sensor, starting from the left in increment degrees to the right
 # See here: https://mavlink.io/en/messages/common.html#OBSTACLE_DISTANCE
@@ -36,12 +36,10 @@ angle_offset = 0
 increment_l = 0
 
 # Sensor Params
-DEPTH_RANGE_M = [0.5, 10.0] # Range for the ZED camera meters, currently testing a min distance of 0.5 meters
+DEPTH_RANGE_M = [0.5, 5] # Range for the ZED camera meters, currently testing a min distance of 0.51 meters to 15 meterse
 DEPTH_HFOV_DEG = 86
 
-# 
 zed = stereolabs.Camera() # Create a Camera object for interacting with the ZED
-# vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=57600)
 
 sector_obstacle_coordinates = np.ones((9,3), dtype = float) * 9999
 distances = np.ones((DISTANCES_ARRAY_LENGTH), dtype = float)
@@ -70,42 +68,45 @@ log.addHandler(log_file)
         bounds[2]: width of bounding box.
         bounds[3]: height of bounding box.
 """
-def get_object_depth(depth, bounds, i):
+def get_object_depth(depth, bounds, sector_num):
     area_div = 2
 
     x_vect = []
     y_vect = []
     z_vect = []
 
-    for j in range(int(bounds[0] - area_div), int(bounds[0] + area_div)):
-        #print(f"j-Start {int(bounds[0] - area_div)}, j-Stop {int(bounds[0] + area_div)}")
-        for i in range(int(bounds[1] - area_div), int(bounds[1] + area_div)):
-            #print(f"i-Start {int(bounds[0] - area_div),} i-Stop {int(bounds[0] + area_div)}")
+    print(f"X-Center = {bounds[0]} | Y-Center = {bounds[1]}")
+    for j in range(int(area_div), int(bounds[0] + area_div)):
+        # print(f"(j-Start {int(bounds[0] - area_div)}, j-Stop {int(bounds[0] + area_div)})")
+        for i in range(int(area_div), int(bounds[1] + area_div)):
+            #print(f"(i-Start {int(bounds[0] - area_div)}, i-Stop {int(bounds[0] + area_div)})")
             z = depth[i, j, 2]
+            # print(z)
             if not np.isnan(z) and not np.isinf(z):
                 x_vect.append(depth[i, j, 0])
                 y_vect.append(depth[i, j, 1])
                 z_vect.append(z)
     try:
-        # x_min = min(x_vect)
-        # y_min = min(y_vect)
-        # z_min = min(z_vect)
-        min_dis = []
+        #print(f"X_Vect\n{x_vect}x_vect\nY_Vect{y_vect}\nZ_Vect{z_vect}")
+        # Default grabbing of the coordinates
+        x_min = min(x_vect)
+        y_min = min(y_vect)
+        z_min = min(z_vect)
 
-        x_min = 0
-        z_min = 0
-        y_min = 0
+        # Add all distance values to an array to then find closests distance and return the (x,y,z) coordinates for it
+        # min_dis = []
+        # for val in range(0, len(z_vect) - 1):
+        #     cur_distance = math.sqrt(x_vect[val] * x_vect[val] + y_vect[val] * y_vect[val] + z_vect[val] * z_vect[val])
+        #     min_dis[val] = cur_distance
 
-        # cur_max = 99999
-        for val in range(0, len(z_vect) - 1):
-            cur_distance = math.sqrt(x_vect[val] * x_vect[val] + y_vect[val] * y_vect[val] + z_vect[val] * z_vect[val])
-            min_dis[val] = cur_distance
+        # # print(f"Array of Distances for Sector {sector_num} (Min Distance = {min_dis})\n{min_dis}")
+        # index = min_dis.index(min(min_dis))
+        # x_min = x_vect[index]
+        # z_min = y_vact[index]
+        # y_min = z_vect[index]
+        # print(f"({x},{y},{z})")
 
-        print(min(min_dis))
-        index = min_dis.index(min(min_dis))
-        x_min = x_vect[index]
-        z_min = y_vact[index]
-        y_min = z_vect[index]
+        min_dis = None # Clear the array from memory incase of duplicate allocation
         
     except Exception:
         x_min = ERROR_MARGIN
@@ -126,7 +127,7 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
     # Do the depth sensing at each individual segment in the 3x3 and take the mean value over the obstacle line thickness
     for i in range(DISTANCES_ARRAY_LENGTH):
         err, point_cloud_value = point_cloud_mat.get_value((int(i * step)), height)
-        dist_m = math.sqrt(point_cloud_value[0] * point_cloud_value[0] + point_cloud_value[1] * point_cloud_value[1] + point_cloud_value[2] * point_cloud_value[2])
+        dist_m = math.sqrt(point_cloud_value[0] * point_cloud_value[0] + point_cloud_value[1] * point_cloud_value[1] + point_cloud_value[2] * point_cloud_value[2]) - ERROR_MARGIN
 
         # A value of max_distance + 1 (cm) means no obstacle is present. 
         # A value of UINT16_MAX (65535) for unknown/not used.
@@ -135,12 +136,23 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
         elif dist_m < min_depth_m:
             distances[i] = 0
         elif dist_m >= max_depth_m or np.isnan(dist_m):
-            distances[i] = 10.01
+            distances[i] = max_depth_m + 0.01
         elif np.isinf(dist_m):
             distances[i] = 655.36
 
     # log.info(f"final distances array in m:\n{distances}")
     # print("{}".format(distances), end='\r')
+
+def connect_to_copter(connection_string):
+    parser = argparse.ArgumentParser(description='commands')
+    parser.add_argument('--connect')
+    args = parser.parse_args()
+
+    # Gives value after --connect; the IP address
+    connection_string = args.connect
+
+    vehicle = connect(connection_string, wait_ready=True, baud=57600)
+    return vehicle
 
 """
     Last Edit: 4/4/2022
@@ -153,13 +165,13 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
 def depth_sector():
     # Create a InitParameters object and set configuration parameters
     init_params = stereolabs.InitParameters()
-    init_params.depth_mode = stereolabs.DEPTH_MODE.QUALITY  # Use PERFORMANCE or QUALITY depth mode
+    init_params.depth_mode = stereolabs.DEPTH_MODE.PERFORMANCE # Use PERFORMANCE or QUALITY depth mode
     init_params.coordinate_units = stereolabs.UNIT.METER  # Use meter units (for depth measurements)
     init_params.camera_resolution = stereolabs.RESOLUTION.HD720 # Resolution set to 720p could go up to 1080p
 
     # Open/start the camera and check for initialization errors
     err = zed.open(init_params)
-    zed.set_camera_settings(stereolabs.VIDEO_SETTINGS.EXPOSURE, 70) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+    #zed.set_camera_settings(stereolabs.VIDEO_SETTINGS.EXPOSURE, 10) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
     zed.set_camera_settings(stereolabs.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
     if err != stereolabs.ERROR_CODE.SUCCESS:
         log.error(repr(err))
@@ -190,11 +202,7 @@ def depth_sector():
     # Start ROS nodes
     rospy.init_node('distance')
     rospy.loginfo('distance node started')
-    # rate = rospy.Rate(15) #15hz
-    # node1 = rospy.Publisher('/darknet_ros/detection_image', Image, queue_size = #)
     node1 = rospy.Publisher('/Tobor/distance_array', LaserScan, queue_size = 10)
-    # node3 = rospy.Publisher('/darknet_ros/color_image', Image, queue_size = #)
-    # node4 = rospy.Publisher('/darknet_ros/nine_sector_image', Image, queue_size = #)
     node2 = rospy.Publisher('/Tobor/9sectorarray', PointCloud, queue_size = 10)
     
     #Initialize laserscan node
@@ -232,7 +240,7 @@ def depth_sector():
             scan.ranges = distances
 
             #publish distance information for mavros node
-            log.info(f"Print Scan: {scan}")
+            # log.info(f"Print Scan: {scan}")
             # print(f"Print Scan: {scan}")
             node1.publish(scan)
             
@@ -244,7 +252,7 @@ def depth_sector():
             gx = 0
             gy = 0
             
-            # Draw sector lines on OpenCV image
+            # Draw sector lines on OpenCV image, comment this out after testing is done on drone to see if it's working
             while gx < (width * 2):
                 cv2.line(image_sector, (gx, 0), (gx, (height * 2)), color=(0, 0, 255), thickness = 1)
                 gx += x_step
@@ -260,6 +268,7 @@ def depth_sector():
             sector[1] = y_step / 2 + gy
             sector[2] = x_step
             sector[3] = y_step
+            #print(f"{sector}")
             while gx < (width * 2 - 2):
                 gy = 0
                 sector[1] = y_step / 2 + gy

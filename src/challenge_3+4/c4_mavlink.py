@@ -2,11 +2,15 @@
 
 # might have to install newer version of pymavlink -> pymavlink5
 
+# First CMD = source devel/setup.bash
+# Start MAVROS = roslaunch mavors apm.launch fcu_url:="/dev/ttyTHS2:115200"
+# Set Flight Mode CMD = rosrun mavros mavsyst mode -c 5
+
 import sys
 
 # Set MAVLink protocol to 2.
 import os
-os.environ["MAVLINK20"] = "1"
+os.environ["MAVLINK20"] = "2"
 
 # Import the libraries
 import numpy as np
@@ -39,9 +43,20 @@ import socket
 connection_string_default = "/dev/ttyTHS2" #'127.0.0.1:14855'
 
 # Ideal baudrate for Mission Planner
-connection_baudrate_default = 57600
+connection_baudrate_default = 115200
 
-#vehicle = connect(connection_string_default, wait_ready=300, baud=connection_baudrate_default)
+# vehicle = connect(connection_string_default, wait_ready=True, baud=115200) # Change True to 300?
+
+# vehicle.parameters["OA_DB_EXPIRE"] = 15
+# vehicle.parameters["OA_DB_QUEUE_SIZE"] = 40
+# vehicle.parameters["OA_LOOKAHEAD"] = 8 
+# vehicle.parameters["OA_MARGIN_MAX"] = 3
+# vehicle.parameters["OA_TYPE"] = 1
+# vehicle.parameters["OA_DB_DIST_MAX"] = 6
+# vehicle.parameters["OA_DB_SIZE"] = 100
+# vehicle.parameters["PRX_TYPE"] = 2
+# vehicle.parameters["PRX_ORIENT"] = 1
+# vehicle.parameters["AVOID_ENABLE"] = 7
 
 # Use this to rotate all processed data
 camera_facing_angle_degree = 0
@@ -53,8 +68,8 @@ device_id = None
 enable_msg_obstacle_distance = False
 enable_3D_msg_obstacle_distance = False
 enable_msg_distance_sensor = False
-obstacle_distance_msg_hz_default = 15.0
-curr_avoid_strategy = ""
+obstacle_distance_msg_hz_default = 35.0
+curr_avoid_strategy = "bendy_avoid"
 prev_avoid_strategy = ""
 
 # enable only if you are on Arducopter 4.1 or higher
@@ -90,7 +105,7 @@ last_obstacle_distance_sent_ms = 0  # value of current_time_us when obstacle_dis
 # See here: https://mavlink.io/en/messages/common.html#OBSTACLE_DISTANCE
 distances_array_length = 72
 angle_offset = None
-increment_f  = None
+increment_f = None 
 distances = np.ones((distances_array_length,), dtype=np.uint16) * (2000 + 1)
 
 # Obstacle distances in nine segments for the new OBSTACLE_DISTANCE_3D message
@@ -164,65 +179,17 @@ def mavlink_loop(conn, callbacks):
             continue
         callbacks[m.get_type()](m)
 
-
-# https://mavlink.io/en/messages/common.html#OBSTACLE_DISTANCE
-def send_obstacle_distance_message():
-    global current_time_us, distances, camera_facing_angle_degree
-    global last_obstacle_distance_sent_ms
-    if (enable_msg_obstacle_distance == True):
-        if current_time_us == last_obstacle_distance_sent_ms:
-            # no new frame
-            progress("no new frame")
-            return
-        last_obstacle_distance_sent_ms = current_time_us
-        #print(distances)
-        if angle_offset is None or increment_f is None:
-            progress("obstacle_distance_params not properly set")
-        else:
-            #progress("new frame")
-            conn.mav.obstacle_distance_send(
-                current_time_us,    # us Timestamp (UNIX time or time since system boot)
-                0,                  # sensor_type, defined here: https://mavlink.io/en/messages/common.html#MAV_DISTANCE_SENSOR
-                distances,          # distances,    uint16_t[72],   cm
-                0,                  # increment,    uint8_t,        deg
-                min_depth_cm,	    # min_distance, uint16_t,       cm
-                max_depth_cm,       # max_distance, uint16_t,       cm
-                increment_f,	    # increment_f,  float,          deg
-                angle_offset,       # angle_offset, float,          deg
-                12                  # MAV_FRAME, vehicle-front aligned: https://mavlink.io/en/messages/common.html#MAV_FRAME_BODY_FRD    
-            )
-            current_time_us = int(round(time.time() * 1000000))
-
-
-# # https://mavlink.io/en/messages/common.html#DISTANCE_SENSOR
-def send_distance_sensor_message():
-    global distances
-    # Average out a portion of the centermost part
-    if (enable_msg_distance_sensor == True):
-        curr_dist = int(np.mean(distances[34:38]))
-        #print(curr_dist)
-        conn.mav.distance_sensor_send(
-            0,# ms Timestamp (UNIX time or time since system boot) (ignored)
-            min_depth_cm,   # min_distance, uint16_t, cm
-            max_depth_cm,   # min_distance, uint16_t, cm
-            curr_dist,      # current_distance,	uint16_t, cm	
-            0,	            # type : 0 (ignored)
-            0,              # id : 0 (ignored)
-            int(camera_facing_angle_degree / 45),              # orientation
-            0               # covariance : 0 (ignored)
-        )
-
 # Prepare for Arducopter 4.1 3D Obstacle Avoidance
 def send_obstacle_distance_3D_message():
     global mavlink_obstacle_coordinates, min_depth_cm, max_depth_cm
     global last_obstacle_distance_sent_ms
     global current_time_ms
     if (enable_3D_msg_obstacle_distance == True):
-        if current_time_ms == last_obstacle_distance_sent_ms:
-            # no new frame
-            progress("no new frame")
-            return
-        last_obstacle_distance_sent_ms = current_time_ms
+        # if current_time_ms == last_obstacle_distance_sent_ms:
+        #     # no new frame
+        #     progress("no new frame")
+        #     return
+        # last_obstacle_distance_sent_ms = current_time_ms
 
         for q in range(9):
             # send 9 sector array
@@ -234,8 +201,8 @@ def send_obstacle_distance_3D_message():
                 float(mavlink_obstacle_coordinates[q][0]),
                 float(mavlink_obstacle_coordinates[q][1]),
                 float(mavlink_obstacle_coordinates[q][2]),
-                float(min_depth_cm/100),
-                float(max_depth_cm/100) #needs to be in meters
+                float(min_depth_cm / 100),
+                float(max_depth_cm / 100) #needs to be in meters
             )
         current_time_ms = current_milli_time()
 
@@ -267,10 +234,12 @@ def fltmode_msg_callback(value):
     global enable_msg_obstacle_distance
     global enable_3D_msg_obstacle_distance
     global distances, ac_version_41
-    dist_arr=[0]*72
+    dist_arr = [0] * 72
     curr_flight_mode = (value.base_mode, value.custom_mode)
-    print("flight mode")
-    print(curr_flight_mode)
+    #if curr_flight_mode[0] == 89:
+    print(f"Value : {value}")
+    print(f"Flight Mode: {curr_flight_mode}")
+    # print(f"Avoid Strat: {curr_avoid_strategy}")
     if ((curr_flight_mode[1] == 5) or (curr_flight_mode[1] == 2)): # Loiter and AltHold only
         curr_avoid_strategy="simple_avoid"
         if (curr_avoid_strategy != prev_avoid_strategy):
@@ -280,16 +249,15 @@ def fltmode_msg_callback(value):
                 enable_3D_msg_obstacle_distance = True
                 print(enable_3D_msg_obstacle_distance)
                 send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
-            else:    
-                distances[distances>0]=0
+            else:
+                distances[distances > 0] = 0
                 enable_msg_distance_sensor = True
                 enable_3D_msg_obstacle_distance = False
                 enable_msg_obstacle_distance = False
                 # send empty discance array as workaround for proximity viewer defect
                 conn.mav.obstacle_distance_send(0,0,dist_arr, 0,100,200,1,0,12)
                 send_msg_to_gcs('Sending distance sensor messages to FCU')
-            prev_avoid_strategy=curr_avoid_strategy
-
+            prev_avoid_strategy = curr_avoid_strategy
     elif ((curr_flight_mode[1] == 3) or (curr_flight_mode[1] == 4) or (curr_flight_mode[1] == 6)): # for Auto Guided and RTL modes
         curr_avoid_strategy="bendy_avoid"
         if (curr_avoid_strategy != prev_avoid_strategy):
@@ -304,8 +272,7 @@ def fltmode_msg_callback(value):
                 enable_3D_msg_obstacle_distance = False
                 enable_msg_distance_sensor = False
                 send_msg_to_gcs('Sending obstacle distance messages to FCU')
-            prev_avoid_strategy=curr_avoid_strategy
-        
+            prev_avoid_strategy = curr_avoid_strategy
     elif (curr_flight_mode[0] != 0):
         curr_avoid_strategy="none"
         if (curr_avoid_strategy != prev_avoid_strategy):
@@ -313,7 +280,7 @@ def fltmode_msg_callback(value):
             enable_msg_distance_sensor = False
             enable_3D_msg_obstacle_distance = False
             send_msg_to_gcs('No valid flt mode for obstacle avoidance')
-            prev_avoid_strategy=curr_avoid_strategy
+            prev_avoid_strategy = curr_avoid_strategy
 
 
 # Listen to ZED ROS node for SLAM data
@@ -337,11 +304,11 @@ def zed_9sector_callback(msg):
         mavlink_obstacle_coordinates[j][0] = msg.points[j].z
         mavlink_obstacle_coordinates[j][1] = (msg.points[j].x)
         mavlink_obstacle_coordinates[j][2] = (-1 * msg.points[j].y)
-        dist_debug[j] = m.sqrt(mavlink_obstacle_coordinates[j][0] * mavlink_obstacle_coordinates[j][0] + mavlink_obstacle_coordinates[j][1] * mavlink_obstacle_coordinates[j][1] + mavlink_obstacle_coordinates[j][2] * mavlink_obstacle_coordinates[j][2])
+        dist_debug[j] = m.sqrt(mavlink_obstacle_coordinates[j][0] * mavlink_obstacle_coordinates[j][0] + mavlink_obstacle_coordinates[j][1] * mavlink_obstacle_coordinates[j][1] + mavlink_obstacle_coordinates[j][2] * mavlink_obstacle_coordinates[j][2]) - 0.45
     #print("\033c")
     #print(min_depth_cm, max_depth_cm)
     #print (mavlink_obstacle_coordinates)
-    #print (dist_debug)
+    # print (dist_debug)
 
 
 ######################################################
@@ -367,7 +334,7 @@ send_msg_to_gcs('ROS node connected')
 sleep(1) # wait until the ROS node has booted
 # register the callbacks
 mavlink_callbacks = {
-    #'ATTITUDE': att_msg_callback,
+    'ATTITUDE': att_msg_callback,
     'HEARTBEAT': fltmode_msg_callback,
 }
 mavlink_thread = threading.Thread(target=mavlink_loop, args=(conn, mavlink_callbacks))
@@ -376,9 +343,7 @@ mavlink_thread.start()
 # Send MAVlink messages in the background at pre-determined frequencies
 sched = BackgroundScheduler()
 
-sched.add_job(send_obstacle_distance_message, 'interval', seconds = 1/obstacle_distance_msg_hz, id='obst_dist')
-sched.add_job(send_distance_sensor_message, 'interval', seconds = 1/obstacle_distance_msg_hz, id='dist_sensor')
-sched.add_job(send_obstacle_distance_3D_message, 'interval', seconds = 1/obstacle_distance_msg_hz, id='3d_obj_dist')
+sched.add_job(send_obstacle_distance_3D_message, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='3d_obj_dist')
 
 sched.start()
 
