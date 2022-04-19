@@ -9,9 +9,11 @@ import argparse  # Allows to input vals from command line to use them in python
 import numpy as np
 import threading
 import sys
-import pyzed.sl as sl
+#import pyzed.sl as sl
 from ctypes import *
 import cv2
+
+current_challenge = 3
 
 def connectMyCopter():
     parser = argparse.ArgumentParser(description='commands')
@@ -173,8 +175,6 @@ class Location:
 
 
 ##################  MAIN    ###################
-
-current_challenge = 3
 target_meters = yards_to_meters(50)
 target_altitude = feet_to_meters(3)
 field_width = yards_to_meters(50)
@@ -286,7 +286,7 @@ elif (current_challenge == 4):
     ty = round(cam_pose.get_translation(py_translation).get()[1], 3)
     tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
 
-    home_location = new Location(tx, ty, tz)
+    home_location = Location(tx, ty, tz)
     half_field = (field_width/2) - home_location.lat
 
     distance_traveled = 0
@@ -327,7 +327,7 @@ elif (current_challenge == 4):
 
         if ((currentLocation.lat > half_field -2) | (currentLocation.lat < half_field + 2)):
             diff_left_and_right = home_location.lat - currentLocation.lat #calculates distance from the center of start position
-    		goto_target_body_ned(target_meters - distance_to_traveled, diff_left_and_right, 0) 
+            goto_target_body_ned(target_meters - distance_to_traveled, diff_left_and_right, 0)
 
         if distance_traveled >= target_meters*0.99:
             print("Target Reached")
