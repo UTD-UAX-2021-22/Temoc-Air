@@ -9,12 +9,17 @@ import argparse  # Allows to input vals from command line to use them in python
 import numpy as np
 import threading
 import sys
-#import pyzed.sl as sl
+import pyzed.sl as sl
 from ctypes import *
 import cv2
-import src/challenge_2/GeneralDroneFunctions.py as gd
+dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
+if dummyDrone == True:
+    import src.challenge_2.DummyGeneralFunctions as gd    
+else:
+    import src.challenge_2.GeneralDroneFunctions as gd 
 
-current_challenge = 3
+
+current_challenge = 4
 
 def connectMyCopter():
     parser = argparse.ArgumentParser(description='commands')
@@ -39,11 +44,11 @@ def armDrone():
         time.sleep(1)  # Wait one second before checking if drone is armable
     print("The drone is now armable")
 
-    vehicle.mode = VehicleMode("GUIDED")
-    while vehicle.mode != 'GUIDED':  # While drone is not in guided mode
-        print("The drone is not in guided mode yet")
+    vehicle.mode = VehicleMode("GUIDED_NOGPS")
+    while vehicle.mode != 'GUIDED_NOGPS':  # While drone is not in guided mode
+        print("The drone is not in guided nogps mode yet")
         time.sleep(1)  # Wait one second before checking if drone is in guided mode
-    print("The drone is now in guided mode")
+    print("The drone is now in guided nogps mode")
 
     vehicle.armed = True
     while vehicle.armed == False:  # While the vehicle has not been armed
@@ -176,49 +181,53 @@ class Location:
 
 
 ##################  MAIN    ###################
-target_meters = yards_to_meters(50)
+target_meters = yards_to_meters(10)
 target_altitude = feet_to_meters(3)
-field_width = yards_to_meters(50)
+field_width = yards_to_meters(9)
 
 #connect to vehicle and get the current
 #vehicle = connect('127.0.0.1:14550', wait_ready=True)
 vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+print("Connected to Drone")
 
 #OA PArameters
 vehicle.parameters["OA_DB_EXPIRE"] = 15
 vehicle.parameters["OA_DB_QUEUE_SIZE"] = 40
-vehicle.parameters["OA_LOOKAHEAD"] = 8 
-vehicle.parameters["OA_MARGIN_MAX"] = 3
+vehicle.parameters["OA_BR_LOOKAHEAD"] = 10 
+vehicle.parameters["OA_MARGIN_MAX"] = 2.7
 vehicle.parameters["OA_TYPE"] = 1
 vehicle.parameters["OA_DB_DIST_MAX"] = 6
 vehicle.parameters["OA_DB_SIZE"] = 100
-vehicle.parameters["PRX_TYPE"] = 2
-vehicle.parameters["PRX_ORIENT"] = 1
+vehicle.parameters["PRX_TYPE"] = 8
+vehicle.parameters["PRX_ORIENT"] = 0
 vehicle.parameters["AVOID_ENABLE"] = 7
 
-#ZED SDK Parameters
+ #ZED SDK Parameters 
+cam = sl.Camera()
 init_parameters = sl.InitParameters()
 init_parameters.camera_resolution = sl.RESOLUTION.HD720
 init_parameters.camera_fps = 60
-init_parameters.depth_mode = sl.DEPTH_MODE.STANDARD
+init_parameters.depth_mode = sl.DEPTH_MODE.PERFORMANCE
 init_parameters.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Z_UP
 init_parameters.coordinate_units = sl.UNIT.METER
 
 #Opening camera
-cam = sl.Camera()
 if not cam.is_opened():
-  log.info("Opening ZED Camera...")
-status = cam.open(init)
-if status != sl.ERROR_CODE.SUCCESS:
-  log.error(repr(status))
-  exit()
+  print("Opening ZED Camera...")
+  status = cam.open(init_parameters)
+  if status != sl.ERROR_CODE.SUCCESS:
+      print(repr(status))
+      cam.close()
+      exit()
+  
+print("Camera Opened")
 
 # Declare your sl.Mat matrices
-image_zed = sl.Mat(image_size.width, image_size.height, sl.MAT_TYPE.U8_C4)
-depth_image_zed = sl.Mat(image_size.width, image_size.height, sl.MAT_TYPE.U8_C4)
+image_zed = sl.Mat()
+depth_image_zed = sl.Mat()
 point_cloud = sl.Mat()
 
-gd.ServoMovement(vehicle, 90)
+#gd.ServoMovement(vehicle, 90)
 
 if (current_challenge == 3):
     home_location = vehicle.location.global_relative_frame
@@ -231,7 +240,7 @@ if (current_challenge == 3):
     vehicle.airspeed = 0.5
     goto_target_body_ned(target_meters, 0, 0)
 
-    while vehicle.mode.name == "GUIDED":
+    while vehicle.mode.name == "GUIDED_NOGPS":
         
         currentLocation = vehicle.location.global_relative_frame
         distance_traveled = get_distance_metres(currentLocation, home_location)
@@ -272,7 +281,7 @@ elif (current_challenge == 4):
     err = cam.enable_positional_tracking(tracking_parameters)
 
     # Set sensing mode in FILL
-    runtime_parameters =sl.RuntimeParameters()
+    runtime_parameters = sl.RuntimeParameters()
     runtime_parameters.sensing_mode = sl.SENSING_MODE.STANDARD
 
     translation_left_to_center = cam.get_camera_information().calibration_parameters.T[0]
@@ -281,7 +290,7 @@ elif (current_challenge == 4):
 
     # Retrieve and transform the pose data into a new frame located at the center of the camera
     tracking_state = cam.get_position(cam_pose, sl.REFERENCE_FRAME.WORLD)
-    transform_pose(tracking_state.pose_data(sl.Transform()), translation_left_to_center)
+    transform_pose(cam_pose.pose_data(sl.Transform()), translation_left_to_center)
 
     py_translation = sl.Translation()
     tx = round(cam_pose.get_translation(py_translation).get()[0], 3)
@@ -298,7 +307,7 @@ elif (current_challenge == 4):
     vehicle.airspeed = 0.5
     goto_target_body_ned(target_meters, 0, 0)
 
-    while vehicle.mode.name == "GUIDED":
+    while vehicle.mode.name == "GUIDED_NOGPS":
         
         tracking_state = cam.get_position(cam_pose, sl.REFERENCE_FRAME.WORLD)
         transform_pose(tracking_state.pose_data(sl.Transform()), translation_left_to_center)
@@ -314,10 +323,10 @@ elif (current_challenge == 4):
             diff_in_altitude = currentLocation.alt - target_altitude
             goto_target_body_ned(0, 0, diff_in_altitude)
             
-            reachedElevation = False
+            reachedElevation = Falsefse
             while reachedElevation == False:  # While the target elevation has not been reached
                 tracking_state = cam.get_position(cam_pose, sl.REFERENCE_FRAME.WORLD)
-                transform_pose(tracking_state.pose_data(sl.Transform()), translation_left_to_center)
+                transform_pose(cam_pose.pose_data(sl.Transform()), translation_left_to_center)
                 currDroneHeight = round(cam_pose.get_translation(py_translation).get()[2], 3)
                 print("Current drone elevation: ", currDroneHeight)
 
