@@ -7,7 +7,7 @@ import argparse  # Allows to input vals from command line to use them in python
 import numpy as np
 import threading
 import sys
-import pyzed.sl as stereolabs
+import asyncio
 from ctypes import *
 
 # Bench Testing
@@ -22,6 +22,7 @@ CURRENT_CHALLENGE = 4
 
 if CURRENT_CHALLENGE == 4:
     import c4_distance as depth_analysis
+    import pyzed.sl as stereolabs
 
 # Function that transorms the position coordinate of the left eye of the camera to the
 # position at the center of the camera
@@ -48,15 +49,20 @@ class Location:
         self.lon = ty
         self.alt = tz
 
-def challenge_3(vehicle, target_meters, target_altitude, field_width):
-    home_location = general_functions.vehicle.location.global_relative_frame
+async def challenge_3(vehicle, target_meters, target_altitude, field_width):
+    home_location = vehicle.location.global_relative_frame
     half_field = (field_width / 2) - home_location.lat
 
     distance_traveled = 0
     currentLocation = home_location
 
-    general_functions.ArmDrone(vehicle, target_altitude)
-    vehicle.airspeed = 1.5
+    general_functions.ArmDrone(vehicle)
+    take_off = asyncio.create_task(general_functions.TakeOffDrone(vehicle, target_altitude))
+    while not (take_off.done()):
+        print("Await liftoff task")
+        await asyncio.sleep(1)
+        
+    vehicle.airspeed = 1.5 # Test Speed
     general_functions.GoToTargetBody(vehicle, target_meters, 0, 0)
 
     while vehicle.mode.name == "GUIDED":
@@ -91,7 +97,7 @@ def challenge_3(vehicle, target_meters, target_altitude, field_width):
 
         time.sleep(1)
 
-def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
+async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
     res_params = stereolabs.Resolution()
     width = round(cam.get_camera_information().camera_resolution.width / 2)
     height = round(cam.get_camera_information().camera_resolution.height / 2)
@@ -131,7 +137,12 @@ def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
     # Initialize ROS & MAVLink
     scan, node1, node2 = depth_analysis.intialize_ros()
 
-    general_functions.ArmDrone(vehicle, target_altitude)
+    general_functions.ArmDrone(vehicle)
+    take_off = asyncio.create_task(general_functions.TakeOffDrone(vehicle, target_altitude))
+    while not (take_off.done()):
+        print("Await liftoff task")
+        await asyncio.sleep(1)
+        
     vehicle.airspeed = 0.5
     general_functions.GoToTargetBody(vehicle, target_meters, 0, 0)
 
@@ -179,7 +190,7 @@ def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
 
 def main():
     target_meters = general_functions.YardsToMeters(10)
-    target_altitude = general_functions.FeetToMaters(3)
+    target_altitude = general_functions.FeetToMeters(3)
     field_width = general_functions.YardsToMeters(9)
 
     print("Connecting To Drone...")
@@ -199,43 +210,42 @@ def main():
     vehicle.parameters["AVOID_ENABLE"] = 7
     print("Connected to Drone")
 
-    print("Intializing & Opening ZED Camera...")
-    #ZED SDK Parameters
-    cam = stereolabs.Camera()
-    init_parameters = stereolabs.InitParameters()
-    init_parameters.camera_resolution = stereolabs.RESOLUTION.HD720
-    init_parameters.camera_fps = 60
-    init_parameters.depth_mode = stereolabs.DEPTH_MODE.PERFORMANCE
-    init_parameters.coordinate_system = stereolabs.COORDINATE_SYSTEM.RIGHT_HANDED_Z_UP
-    init_parameters.coordinate_units = stereolabs.UNIT.METER
-
-    # Opening camera
-    if not cam.is_opened():
-        print("Opening ZED Camera...")
-        status = cam.open(init_parameters)
-        if status != stereolabs.ERROR_CODE.SUCCESS:
-            print(repr(status))
-            cam.close()
-            exit()
-    
-    # Create and set RuntimeParameters after opening the camera
-    runtime_parameters = stereolabs.RuntimeParameters()
-    runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.FILL
-    
-    # Setting the depth confidence parameters
-    runtime_parameters.confidence_threshold = 100
-    runtime_parameters.textureness_confidence_threshold = 100
-    print("ZED Camera Opened & Intialized")
-
     general_functions.ServoMovement(vehicle, 90)
     
     # Start the correct challenge
     if CURRENT_CHALLENGE == 3:
-        challenge_3(cam, vehicle, target_meters, target_altitude, field_width)
+        challenge_3(vehicle, target_meters, target_altitude, field_width)
     elif CURRENT_CHALLENGE == 4:
+        print("Intializing & Opening ZED Camera...")
+        #ZED SDK Parameters
+        cam = stereolabs.Camera()
+        init_parameters = stereolabs.InitParameters()
+        init_parameters.camera_resolution = stereolabs.RESOLUTION.HD720
+        init_parameters.camera_fps = 60
+        init_parameters.depth_mode = stereolabs.DEPTH_MODE.PERFORMANCE
+        init_parameters.coordinate_system = stereolabs.COORDINATE_SYSTEM.RIGHT_HANDED_Z_UP
+        init_parameters.coordinate_units = stereolabs.UNIT.METER
+
+        # Opening camera
+        if not cam.is_opened():
+            print("Opening ZED Camera...")
+            status = cam.open(init_parameters)
+            if status != stereolabs.ERROR_CODE.SUCCESS:
+                print(repr(status))
+                cam.close()
+                exit()
+        
+        # Create and set RuntimeParameters after opening the camera
+        runtime_parameters = stereolabs.RuntimeParameters()
+        runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.FILL
+        
+        # Setting the depth confidence parameters
+        runtime_parameters.confidence_threshold = 100
+        runtime_parameters.textureness_confidence_threshold = 100
+        print("ZED Camera Opened & Intialized")
         challenge_4(cam, vehicle, target_meters, target_altitude, field_width)
     
-    general_functions.landDrone()
+    general_functions.LandDrone(vehicle)
     vehicle.close() #stop copter from running
     cam.disable_positional_tracking()
     cam.close()
