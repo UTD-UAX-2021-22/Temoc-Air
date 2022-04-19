@@ -7,8 +7,6 @@
 # Set Flight Mode CMD = rosrun mavros mavsyst mode -c 5
 
 import sys
-
-# Set MAVLink protocol to 2.
 import os
 os.environ["MAVLINK20"] = "2"
 
@@ -35,45 +33,24 @@ import socket
 # Default configurations for connection to the FCU
 # Decide which board you are using to connect to the flight controller via mavlink:
 # If you are using the J17 connector on the Nvidia TX2 development board
-# then set connection_string_default = /dev/ttyTHS2
+# then set CONNECTION_DEFAULT_STRING = /dev/ttyTHS2
 # if you are using the Auvidea J120 board, then set
-# connection_string_default=/dev/ttyTHS1
+# CONNECTION_DEFAULT_STRING=/dev/ttyTHS1
 # if you are using mavlink_router include the IP address for the ROS connection here
 
-connection_string_default = "/dev/ttyTHS2" #'127.0.0.1:14855'
+CONNECTION_DEFAULT_STRING = "/dev/ttyTHS2" #'127.0.0.1:14855'
 
 # Ideal baudrate for Mission Planner
-connection_baudrate_default = 115200
-
-# vehicle = connect(connection_string_default, wait_ready=True, baud=115200) # Change True to 300?
-
-# vehicle.parameters["OA_DB_EXPIRE"] = 15
-# vehicle.parameters["OA_DB_QUEUE_SIZE"] = 40
-# vehicle.parameters["OA_LOOKAHEAD"] = 8 
-# vehicle.parameters["OA_MARGIN_MAX"] = 3
-# vehicle.parameters["OA_TYPE"] = 1
-# vehicle.parameters["OA_DB_DIST_MAX"] = 6
-# vehicle.parameters["OA_DB_SIZE"] = 100
-# vehicle.parameters["PRX_TYPE"] = 2
-# vehicle.parameters["PRX_ORIENT"] = 1
-# vehicle.parameters["AVOID_ENABLE"] = 7
-
-# Use this to rotate all processed data
-camera_facing_angle_degree = 0
-
-# Store device serial numbers of connected camera
-device_id = None
+CONNECTION_DEFAULT_BAUD = 115200
 
 # Enable/disable each message/function individually
-enable_msg_obstacle_distance = False
 enable_3D_msg_obstacle_distance = False
-enable_msg_distance_sensor = False
 obstacle_distance_msg_hz_default = 35.0
 curr_avoid_strategy = "bendy_avoid"
 prev_avoid_strategy = ""
 
 # enable only if you are on Arducopter 4.1 or higher
-ac_version_41 = True
+AC_VERSION_41 = True
 
 # lock for thread synchronization
 lock = threading.Lock()
@@ -114,13 +91,11 @@ mavlink_obstacle_coordinates = np.ones((9,3), dtype = float) * (9999)
 dist_debug = np.ones((9), dtype = float)
 debug_enable = 1
 
-######################################################
-##  Parsing user' inputs                            ##
-######################################################
-
 parser = argparse.ArgumentParser(description='Reboots vehicle')
+
+# Parses user input for the connection
 parser.add_argument('--connect',
-                    help="Vehicle connection target string. If not specified, a default string will be used.")
+                        help="Vehicle connection target string. If not specified, a default string will be used.")
 parser.add_argument('--baudrate', type=float,
                     help="Vehicle connection baudrate. If not specified, a default value will be used.")
 parser.add_argument('--obstacle_distance_msg_hz', type=float,
@@ -128,8 +103,7 @@ parser.add_argument('--obstacle_distance_msg_hz', type=float,
 parser.add_argument('--debug_enable',type=float,
                     help="Enable debugging information")
 parser.add_argument('--camera_name', type=str,
-                    help="Camera name to be connected to. If not specified, any valid camera will be connected to randomly. For eg: type 'D435I' to look for Intel RealSense D435I.")
-
+                    help="Camera name to be connected to. If not specified, any valid camera will be connected to randomly. For eg: type 'D435I' to look for Intel RealSense D435I.")  
 args = parser.parse_args()
 
 connection_string = args.connect
@@ -143,13 +117,13 @@ def progress(string):
 
 # Using default values if no specified inputs
 if not connection_string:
-    connection_string = connection_string_default
+    connection_string = CONNECTION_DEFAULT_STRING
     progress("INFO: Using default connection_string %s" % connection_string)
 else:
     progress("INFO: Using connection_string %s" % connection_string)
 
 if not connection_baudrate:
-    connection_baudrate = connection_baudrate_default
+    connection_baudrate = CONNECTION_DEFAULT_BAUD
     progress("INFO: Using default connection_baudrate %s" % connection_baudrate)
 else:
     progress("INFO: Using connection_baudrate %s" % connection_baudrate)
@@ -230,10 +204,8 @@ def att_msg_callback(value):
 def fltmode_msg_callback(value):
     global curr_avoid_strategy
     global prev_avoid_strategy
-    global enable_msg_distance_sensor
-    global enable_msg_obstacle_distance
     global enable_3D_msg_obstacle_distance
-    global distances, ac_version_41
+    global distances, AC_VERSION_41
     dist_arr = [0] * 72
     curr_flight_mode = (value.base_mode, value.custom_mode)
     #if curr_flight_mode[0] == 89:
@@ -243,48 +215,28 @@ def fltmode_msg_callback(value):
     if ((curr_flight_mode[1] == 5) or (curr_flight_mode[1] == 2)): # Loiter and AltHold only
         curr_avoid_strategy="simple_avoid"
         if (curr_avoid_strategy != prev_avoid_strategy):
-            if ((ac_version_41 == True) and (curr_flight_mode[1] == 5)): # only AC 4.1 or higher and LOITER
-                enable_msg_obstacle_distance = False
-                enable_msg_distance_sensor = False
+            if ((AC_VERSION_41 == True) and (curr_flight_mode[1] == 5)): # only AC 4.1 or higher and LOITER
                 enable_3D_msg_obstacle_distance = True
                 print(enable_3D_msg_obstacle_distance)
                 send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
-            else:
-                distances[distances > 0] = 0
-                enable_msg_distance_sensor = True
-                enable_3D_msg_obstacle_distance = False
-                enable_msg_obstacle_distance = False
-                # send empty discance array as workaround for proximity viewer defect
-                conn.mav.obstacle_distance_send(0,0,dist_arr, 0,100,200,1,0,12)
-                send_msg_to_gcs('Sending distance sensor messages to FCU')
             prev_avoid_strategy = curr_avoid_strategy
     elif ((curr_flight_mode[1] == 3) or (curr_flight_mode[1] == 4) or (curr_flight_mode[1] == 6)): # for Auto Guided and RTL modes
-        curr_avoid_strategy="bendy_avoid"
+        curr_avoid_strategy = "bendy_avoid"
         if (curr_avoid_strategy != prev_avoid_strategy):
-            if (ac_version_41 == True): # only AC 4.1 or higher
-                enable_msg_obstacle_distance = False
-                enable_msg_distance_sensor = False
+            if (AC_VERSION_41 == True): # only AC 4.1 or higher
                 enable_3D_msg_obstacle_distance = True
                 print(enable_3D_msg_obstacle_distance)
                 send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
-            else:
-                enable_msg_obstacle_distance = True
-                enable_3D_msg_obstacle_distance = False
-                enable_msg_distance_sensor = False
-                send_msg_to_gcs('Sending obstacle distance messages to FCU')
             prev_avoid_strategy = curr_avoid_strategy
     elif (curr_flight_mode[0] != 0):
-        curr_avoid_strategy="none"
+        curr_avoid_strategy = "none"
         if (curr_avoid_strategy != prev_avoid_strategy):
-            enable_msg_obstacle_distance = False
-            enable_msg_distance_sensor = False
             enable_3D_msg_obstacle_distance = False
             send_msg_to_gcs('No valid flt mode for obstacle avoidance')
             prev_avoid_strategy = curr_avoid_strategy
 
-
 # Listen to ZED ROS node for SLAM data
-def zed_dist_callback(msg):
+def data_callback_from_zed(msg):
     global distances, angle_offset, increment_f, min_depth_cm, max_depth_cm
     distances = np.array([i * 100 for i in msg.ranges]).astype(int)
     min_depth_cm = int(msg.range_min * 100)
@@ -292,11 +244,11 @@ def zed_dist_callback(msg):
     increment_f = msg.angle_increment
     # there appears to be a defect in the obstacle_distance function in Arducopter 4.0.x
     # so we need to set the offset manually and cant take the correct calculated increment
-    if (ac_version_41 == False):
+    if (AC_VERSION_41 == False):
         increment_f = 1.6
     angle_offset = msg.angle_min
 
-def zed_9sector_callback(msg):
+def sector_data_callback(msg):
     global mavlink_obstacle_coordinates, min_depth_cm, max_depth_cm
     min_depth_cm = int(msg.channels[0].values[0] * 100)
     max_depth_cm = int(msg.channels[0].values[1] * 100)
@@ -328,8 +280,8 @@ conn = mavutil.mavlink_connection(
 send_msg_to_gcs('Connecting to ROS node...')
 rospy.init_node('listener')
 rospy.loginfo('listener node started')
-rospy.Subscriber('/Tobor/distance_array', LaserScan, zed_dist_callback)
-rospy.Subscriber('/Tobor/9sectorarray', PointCloud, zed_9sector_callback)
+rospy.Subscriber('/Tobor/distance_array', LaserScan, data_callback_from_zed)
+rospy.Subscriber('/Tobor/9sectorarray', PointCloud, sector_data_callback)
 send_msg_to_gcs('ROS node connected')
 sleep(1) # wait until the ROS node has booted
 # register the callbacks
@@ -342,9 +294,7 @@ mavlink_thread.start()
 
 # Send MAVlink messages in the background at pre-determined frequencies
 sched = BackgroundScheduler()
-
 sched.add_job(send_obstacle_distance_3D_message, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='3d_obj_dist')
-
 sched.start()
 
 # Begin of the main loop

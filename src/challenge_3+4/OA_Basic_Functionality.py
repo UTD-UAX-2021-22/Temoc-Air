@@ -1,5 +1,3 @@
-# Dependencies
-
 from dronekit import connect, VehicleMode, LocationGlobalRelative, APIException
 import time
 import socket
@@ -9,152 +7,31 @@ import argparse  # Allows to input vals from command line to use them in python
 import numpy as np
 import threading
 import sys
-import pyzed.sl as sl
+import pyzed.sl as stereolabs
 from ctypes import *
-import cv2
 
-def connectMyCopter():
-    parser = argparse.ArgumentParser(description='commands')
-    parser.add_argument('--connect')
-    args = parser.parse_args()
+# Bench Testing
+dummyDrone = False # Set to True to bench test and not connect to real drone, False for actual flights
+if dummyDrone == True:
+    import src.challenge_2.DummyGeneralFunctions as general_functions    
+else:
+    import src.challenge_2.GeneralDroneFunctions as general_functions
 
-    connection_string = args.connect  # Gives value after --connect; the IP address
+# Set constant variables
+CURRENT_CHALLENGE = 4
 
-    if not connection_string:  # If the connection string is empty; none provided
-        # Create a SITL drone instance instead of launching one beforehand
-        import dronekit_sitl
-        sitl = dronekit_sitl.start_default()
-        connection_string = sitl.connection_string()
-
-    vehicle = connect(connection_string, wait_ready=True)
-    return vehicle
-
-##############################################
-def armDrone():
-    while vehicle.is_armable == False:  # While the drone hasn't been armed
-        print("Waiting for drone to become armable")
-        time.sleep(1)  # Wait one second before checking if drone is armable
-    print("The drone is now armable")
-
-    vehicle.mode = VehicleMode("GUIDED")
-    while vehicle.mode != 'GUIDED':  # While drone is not in guided mode
-        print("The drone is not in guided mode yet")
-        time.sleep(1)  # Wait one second before checking if drone is in guided mode
-    print("The drone is now in guided mode")
-
-    vehicle.armed = True
-    while vehicle.armed == False:  # While the vehicle has not been armed
-        print("Waiting for drone to arm")
-        time.sleep(1)  # Wait one second before checking if drone has been armed
-    print("The drone has now been armed")
-
-def arm_and_takeoff(elevation):
-    armDrone()  # Arm the drone
-
-    print("Flying up to ", elevation, "m")
-    vehicle.simple_takeoff(elevation)  # Begin takeoff procedure to reach elevation
-
-    reachedElevation = False
-    while reachedElevation == False:  # While the target elevation has not been reached
-        currDroneHeight = vehicle.location.global_relative_frame.alt
-        print("Current drone elevation: ", currDroneHeight)
-
-        if currDroneHeight >= (.95 * elevation):  # If the drone is at the target elevation (account for timing)
-            reachedElevation = True
-        time.sleep(1)
-    print("Drone has reached target elevation")
-
-def stayInAir(seconds):
-    print("Staying in the air for ", seconds, " seconds")
-    counter = 0
-    while counter < seconds:
-        print("Relaxing up high")
-        time.sleep(1)
-        counter += 1
-
-
-def landDrone():
-    vehicle.mode = VehicleMode('LAND')
-    while vehicle.mode != 'LAND':  # While drone is not in land-mode
-        time.sleep(1)  # Wait one second before checking if drone is in land-mode
-    print("Okay, initiating landing now...")
-
-    landed = False
-    while landed == False:  # While the drone has not landed
-        currElevation = vehicle.location.global_relative_frame.alt  # Get current elevation
-        if currElevation <= 0.01:  # If the drone has reached the ground
-            landed = True  # It has landed
-    print("The drone has landed!")
-
-def body_ned_velocity(velocity_x, velocity_y, velocity_z, duration):
-    """
-    Move vehicle in direction based on specified velocity vectors.
-    X will move the drone forward and backwards
-    y will move the drone left and right
-    z is up and down
-    """
-    msg = vehicle.message_factory.set_position_target_local_ned_encode(
-        0,       # time_boot_ms (not used)
-        0, 0,    # target system, target component
-        mavutil.mavlink.MAV_FRAME_BODY_NED, # frame
-        0b0000111111000111, # type_mask (only speeds enabled)
-        0, 0, 0, # x, y, z positions (not used)
-        velocity_x, velocity_y, velocity_z, # x, y, z velocity in m/s
-        0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
-        0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
-
-
-    # send command to vehicle on 1 Hz cycle
-    for x in range(0,duration):
-        vehicle.send_mavlink(msg)
-        time.sleep(1)
-
-def goto_target_body_ned(north, east, down):
-    """
-    Send command to request the vehicle fly to a specified
-    location in the North, East, Down frame of the drone's body. So north is direction that
-    drone is facing.
-    """
-    msg = vehicle.message_factory.set_position_target_local_ned_encode(
-        0,       # time_boot_ms (not used)
-        0, 0,    # target system, target component
-        mavutil.mavlink.MAV_FRAME_BODY_NED, # frame
-        0b0000111111111000, # type_mask (only positions enabled)
-        north, east, down,
-        0, 0, 0, # x, y, z velocity in m/s  (not used)
-        0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
-        0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
-    # send command to vehicle
-    vehicle.send_mavlink(msg)
-
-def get_distance_metres(aLocation1, aLocation2):
-    """
-    Returns the ground distance in metres between two LocationGlobal objects.
-    This method is an approximation, and will not be accurate over large distances and close to the
-    earth's poles. It comes from the ArduPilot test code:
-    https://github.com/diydrones/ardupilot/blob/master/Tools/autotest/common.py
-    """
-    dlat = aLocation2.lat - aLocation1.lat
-    dlong = aLocation2.lon - aLocation1.lon
-    return math.sqrt((dlat*dlat) + (dlong*dlong)) * 1.113195e5
-
-def yards_to_meters(yards):
-    meters = yards * 0.9144
-    return meters
-
-def feet_to_meters(feet):
-    meters = feet * 0.3048
-    return meters
+if CURRENT_CHALLENGE == 4:
+    import c4_distance as depth_analysis
 
 # Function that transorms the position coordinate of the left eye of the camera to the
 # position at the center of the camera
 def transform_pose(pose, tx) :
-  transform_ = sl.Transform()
+  transform_ = stereolabs.Transform()
   transform_.set_identity()
   # Translate the tracking frame by tx along the X axis
   transform_[0][3] = tx
   # Pose(new reference frame) = M.inverse() * pose (camera frame) * M, where M is the transform between the two frames
-  transform_inv = sl.Transform()
+  transform_inv = stereolabs.Transform()
   transform_inv.init_matrix(transform_)
   transform_inv.inverse()
   pose = transform_inv * pose * transform_
@@ -171,125 +48,197 @@ class Location:
         self.lon = ty
         self.alt = tz
 
+def challenge_3(vehicle, target_meters, target_altitude, field_width):
+    home_location = general_functions.vehicle.location.global_relative_frame
+    half_field = (field_width / 2) - home_location.lat
 
-##################  MAIN    ###################
+    distance_traveled = 0
+    currentLocation = home_location
 
+    general_functions.arm_and_takeoff(target_altitude)
+    vehicle.airspeed = 0.5
+    general_functions.goto_target_body_ned(target_meters, 0, 0)
 
-target_altitude = feet_to_meters(3)
-TRAVEL_DISTANCE = 50 # The max travel distance the drone needs to travel across the field
-target_meters = yards_to_meters(TRAVEL_DISTANCE)
-field_width = yards_to_meters(53.3333)
+    while vehicle.mode.name == "GUIDED":
+        
+        currentLocation = vehicle.location.global_relative_frame
+        distance_traveled = general_functions.get_distance_metres(currentLocation, home_location)
+        print("Distance traveled: ", distance_traveled)
 
-#connect to vehicle and get the current
-vehicle = connect('127.0.0.1:14550', wait_ready=True)
+        if ((currentLocation.alt > target_altitude + 0.5) | (currentLocation.alt < target_altitude - 0.5)):
+            diff_in_altitude = currentLocation.alt - target_altitude
+            general_functions.goto_target_body_ned(0, 0, diff_in_altitude)
+            
+            reachedElevation = False
+            while reachedElevation == False:  # While the target elevation has not been reached
+                currentAltLocation = vehicle.location.global_relative_frame
+                currDroneHeight = currentAltLocation.alt
+                print("Current drone elevation: ", currDroneHeight)
 
-#OA PArameters
-vehicle.parameters["OA_DB_EXPIRE"] = 15
-vehicle.parameters["OA_DB_QUEUE_SIZE"] = 40
-vehicle.parameters["OA_LOOKAHEAD"] = 8 
-vehicle.parameters["OA_MARGIN_MAX"] = 3
-vehicle.parameters["OA_TYPE"] = 1
-vehicle.parameters["OA_DB_DIST_MAX"] = 6
-vehicle.parameters["OA_DB_SIZE"] = 100
-vehicle.parameters["PRX_TYPE"] = 2
-vehicle.parameters["PRX_ORIENT"] = 1
-vehicle.parameters["AVOID_ENABLE"] = 7
+                if currDroneHeight >= (.95 * target_altitude):  # If the drone is at the target elevation (account for timing)
+                    reachedElevation = True
+                time.sleep(1)
+                
+            general_functions.goto_target_body_ned(target_meters - distance_traveled, 0, 0)
 
-#ZED SDK Parameters
-init_parameters = sl.InitParameters()
-init_parameters.camera_resolution = sl.RESOLUTION.HD720
-init_parameters.camera_fps = 60
-init_parameters.depth_mode = sl.DEPTH_MODE.STANDARD
-init_parameters.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Z_UP
-init_parameters.coordinate_units = sl.UNIT.METER
+        if ((currentLocation.lat > half_field -2) | (currentLocation.lat < half_field + 2)):
+            diff_left_and_right = home_location.lat - currentLocation.lat #calculates distance from the center of start position
+            general_functions.goto_target_body_ned(target_meters - distance_traveled, diff_left_and_right, 0) 
 
-#Opening camera
-cam = sl.Camera()
-if not cam.is_opened():
-  log.info("Opening ZED Camera...")
-status = cam.open(init)
-if status != sl.ERROR_CODE.SUCCESS:
-  log.error(repr(status))
-  exit()
+        if distance_traveled >= target_meters * 0.99:
+            print("Target Reached")
+            break
 
-# Declare your sl.Mat matrices
-image_zed = sl.Mat(image_size.width, image_size.height, sl.MAT_TYPE.U8_C4)
-depth_image_zed = sl.Mat(image_size.width, image_size.height, sl.MAT_TYPE.U8_C4)
-point_cloud = sl.Mat()
+        time.sleep(1)
 
-# Enable positional tracking with default parameters
-tracking_parameters = sl.PositionalTrackingParameters()
-err = cam.enable_positional_tracking(tracking_parameters)
-
-# Set sensing mode in FILL
-runtime_parameters =sl.RuntimeParameters()
-runtime_parameters.sensing_mode = sl.SENSING_MODE.STANDARD
-
-translation_left_to_center = cam.get_camera_information().calibration_parameters.T[0]
-
-cam_pose = sl.Pose()
-
-# Retrieve and transform the pose data into a new frame located at the center of the camera
-tracking_state = cam.get_position(cam_pose, sl.REFERENCE_FRAME.WORLD)
-transform_pose(tracking_state.pose_data(sl.Transform()), translation_left_to_center)
-
-py_translation = sl.Translation()
-tx = round(cam_pose.get_translation(py_translation).get()[0], 3)
-ty = round(cam_pose.get_translation(py_translation).get()[1], 3)
-tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
-
-home_location = new Location(tx, ty, tz)
-half_field = (field_width/2) - home_location.lat
-
-distance_traveled = 0
-currentLocation = home_location
-
-arm_and_takeoff(target_altitude)
-vehicle.airspeed = 0.5
-goto_target_body_ned(target_meters, 0, 0)
-
-while vehicle.mode.name == "GUIDED":
+def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
+    res_params = stereolabs.Resolution()
+    width = round(cam.get_camera_information().camera_resolution.width / 2)
+    height = round(cam.get_camera_information().camera_resolution.height / 2)
+    res_params.width = width
+    res_params.height = height
     
-    tracking_state = cam.get_position(cam_pose, sl.REFERENCE_FRAME.WORLD)
-    transform_pose(tracking_state.pose_data(sl.Transform()), translation_left_to_center)
+    # Enable positional tracking with default parameters
+    tracking_parameters = stereolabs.PositionalTrackingParameters()
+    err = cam.enable_positional_tracking(tracking_parameters)
+
+    # Set sensing mode in FILL
+    runtime_parameters = stereolabs.RuntimeParameters()
+    runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.STANDARD
+
+    translation_left_to_center = cam.get_camera_information().calibration_parameters.T[0]
+
+    cam_pose = stereolabs.Pose()
+
+    # Retrieve and transform the pose data into a new frame located at the center of the camera
+    tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.WORLD)
+    transform_pose(cam_pose.pose_data(stereolabs.Transform()), translation_left_to_center)
+
+    py_translation = stereolabs.Translation()
     tx = round(cam_pose.get_translation(py_translation).get()[0], 3)
     ty = round(cam_pose.get_translation(py_translation).get()[1], 3)
     tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
 
-    currentLocation.set(tx, ty, tz)
-    distance_traveled = get_distance_metres(currentLocation, home_location)
-    print("Distance traveled: ", distance_traveled)
+    home_location = Location(tx, ty, tz)
+    half_field = (field_width/2) - home_location.lat
+    
+    sector_mat = stereolabs.Mat()
+    point_cloud_mat = stereolabs.Mat()
 
-    # Altitude checker
-    if ((currentLocation.alt > target_altitude + 0.5) | (currentLocation.alt < target_altitude - 0.5)):
-        diff_in_altitude = currentLocation.alt - target_altitude
-        goto_target_body_ned(0, 0, diff_in_altitude)
+    distance_traveled = 0
+    currentLocation = home_location
+    
+    # Initialize ROS & MAVLink
+    scan, node1, node2 = depth_analysis.intialize_ros()
+
+    general_functions.arm_and_takeoff(target_altitude)
+    vehicle.airspeed = 0.5
+    general_functions.goto_target_body_ned(target_meters, 0, 0)
+
+    while vehicle.mode.name == "GUIDED_NOGPS":
         
-        reachedElevation = False
-        while reachedElevation == False:  # While the target elevation has not been reached
-            tracking_state = cam.get_position(cam_pose, sl.REFERENCE_FRAME.WORLD)
-            transform_pose(tracking_state.pose_data(sl.Transform()), translation_left_to_center)
-            currDroneHeight = round(cam_pose.get_translation(py_translation).get()[2], 3)
-            print("Current drone elevation: ", currDroneHeight)
+        tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.WORLD)
+        transform_pose(tracking_state.pose_data(stereolabs.Transform()), translation_left_to_center)
+        tx = round(cam_pose.get_translation(py_translation).get()[0], 3)
+        ty = round(cam_pose.get_translation(py_translation).get()[1], 3)
+        tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
+        
+        # Start depth analysis here?
+        depth_analysis.depth_sector(cam, sector_mat, point_cloud_mat, scan, node1, node2)
 
-            if currDroneHeight >= (.95 * elevation):  # If the drone is at the target elevation (account for timing)
-                reachedElevation = True
-            time.sleep(1)
+        currentLocation.set(tx, ty, tz)
+        distance_traveled = general_functions.get_distance_metres(currentLocation, home_location)
+        print("Distance traveled: ", distance_traveled)
+
+        if ((currentLocation.alt > target_altitude + 0.5) | (currentLocation.alt < target_altitude - 0.5)):
+            diff_in_altitude = currentLocation.alt - target_altitude
+            general_functions.goto_target_body_ned(0, 0, diff_in_altitude)
             
-        goto_target_body_ned(target_meters - distance_traveled, 0, 0)
+            reachedElevation = False
+            while reachedElevation == False:  # While the target elevation has not been reached
+                tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.WORLD)
+                transform_pose(cam_pose.pose_data(stereolabs.Transform()), translation_left_to_center)
+                currDroneHeight = round(cam_pose.get_translation(py_translation).get()[2], 3)
+                print("Current drone elevation: ", currDroneHeight)
 
-    # Bounds of field on poles
-    if ((currentLocation.lat > half_field -2) | (currentLocation.lat < half_field + 2)):
-        diff_left_and_right = home_location.lat - currentLocation.lat #calculates distance from the center of start position
-		goto_target_body_ned(target_meters - distance_to_traveled, diff_left_and_right, 0) 
+                if currDroneHeight >= (.95 * target_altitude):  # If the drone is at the target elevation (account for timing)
+                    reachedElevation = True
+                time.sleep(1)
+                
+            general_functions.goto_target_body_ned(target_meters - distance_traveled, 0, 0)
 
-    if distance_traveled >= target_meters*0.99:
-        print("Target Reached")
-        break
+        if ((currentLocation.lat > half_field -2) | (currentLocation.lat < half_field + 2)):
+            diff_left_and_right = home_location.lat - currentLocation.lat #calculates distance from the center of start position
+            general_functions.goto_target_body_ned(target_meters - distance_traveled, diff_left_and_right, 0)
 
-    time.sleep(1)
+        if distance_traveled >= target_meters*0.99:
+            print("Target Reached")
+            break
 
-landDrone()
-vehicle.close() #stop copter from running
-zed.disable_positional_tracking()
-zed.close()
+        time.sleep(1)
+
+def main():
+    target_meters = general_functions.yards_to_meters(10)
+    target_altitude = general_functions.feet_to_meters(3)
+    field_width = general_functions.yards_to_meters(9)
+
+    print("Connecting To Drone...")
+    #vehicle = connect('127.0.0.1:14550', wait_ready=True)
+    vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+
+    #OA PArameters
+    vehicle.parameters["OA_DB_EXPIRE"] = 15
+    vehicle.parameters["OA_DB_QUEUE_SIZE"] = 40
+    vehicle.parameters["OA_BR_LOOKAHEAD"] = 10 
+    vehicle.parameters["OA_MARGIN_MAX"] = 2.7
+    vehicle.parameters["OA_TYPE"] = 1
+    vehicle.parameters["OA_DB_DIST_MAX"] = 6
+    vehicle.parameters["OA_DB_SIZE"] = 100
+    vehicle.parameters["PRX_TYPE"] = 8
+    vehicle.parameters["PRX_ORIENT"] = 0
+    vehicle.parameters["AVOID_ENABLE"] = 7
+    print("Connected to Drone")
+
+    print("Intializing & Opening ZED Camera...")
+    #ZED SDK Parameters
+    cam = stereolabs.Camera()
+    init_parameters = stereolabs.InitParameters()
+    init_parameters.camera_resolution = stereolabs.RESOLUTION.HD720
+    init_parameters.camera_fps = 60
+    init_parameters.depth_mode = stereolabs.DEPTH_MODE.PERFORMANCE
+    init_parameters.coordinate_system = stereolabs.COORDINATE_SYSTEM.RIGHT_HANDED_Z_UP
+    init_parameters.coordinate_units = stereolabs.UNIT.METER
+
+    # Opening camera
+    if not cam.is_opened():
+        print("Opening ZED Camera...")
+        status = cam.open(init_parameters)
+        if status != stereolabs.ERROR_CODE.SUCCESS:
+            print(repr(status))
+            cam.close()
+            exit()
+    
+    # Create and set RuntimeParameters after opening the camera
+    runtime_parameters = stereolabs.RuntimeParameters()
+    runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.FILL
+    
+    # Setting the depth confidence parameters
+    runtime_parameters.confidence_threshold = 100
+    runtime_parameters.textureness_confidence_threshold = 100
+    print("ZED Camera Opened & Intialized")
+
+    general_functions.ServoMovement(vehicle, 90)
+    
+    # Start the correct challenge
+    if CURRENT_CHALLENGE == 3:
+        challenge_3(cam, vehicle, target_meters, target_altitude, field_width)
+    elif CURRENT_CHALLENGE == 4:
+        challenge_4(cam, vehicle, target_meters, target_altitude, field_width)
+    
+    general_functions.landDrone()
+    vehicle.close() #stop copter from running
+    cam.disable_positional_tracking()
+    cam.close()
+
+if __name__ == "__main__":
+    main()
