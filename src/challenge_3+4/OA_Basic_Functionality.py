@@ -55,9 +55,9 @@ def challenge_3(vehicle, target_meters, target_altitude, field_width):
     distance_traveled = 0
     currentLocation = home_location
 
-    general_functions.arm_and_takeoff(target_altitude)
-    vehicle.airspeed = 0.5
-    general_functions.goto_target_body_ned(target_meters, 0, 0)
+    general_functions.ArmDrone(vehicle, target_altitude)
+    vehicle.airspeed = 1.5
+    general_functions.GoToTargetBody(vehicle, target_meters, 0, 0)
 
     while vehicle.mode.name == "GUIDED":
         
@@ -67,7 +67,7 @@ def challenge_3(vehicle, target_meters, target_altitude, field_width):
 
         if ((currentLocation.alt > target_altitude + 0.5) | (currentLocation.alt < target_altitude - 0.5)):
             diff_in_altitude = currentLocation.alt - target_altitude
-            general_functions.goto_target_body_ned(0, 0, diff_in_altitude)
+            general_functions.GoToTargetBody(vehicle, 0, 0, diff_in_altitude)
             
             reachedElevation = False
             while reachedElevation == False:  # While the target elevation has not been reached
@@ -79,11 +79,11 @@ def challenge_3(vehicle, target_meters, target_altitude, field_width):
                     reachedElevation = True
                 time.sleep(1)
                 
-            general_functions.goto_target_body_ned(target_meters - distance_traveled, 0, 0)
+            general_functions.GoToTargetBody(vehicle, target_meters - distance_traveled, 0, 0)
 
         if ((currentLocation.lat > half_field -2) | (currentLocation.lat < half_field + 2)):
             diff_left_and_right = home_location.lat - currentLocation.lat #calculates distance from the center of start position
-            general_functions.goto_target_body_ned(target_meters - distance_traveled, diff_left_and_right, 0) 
+            general_functions.GoToTargetBody(vehicle, target_meters - distance_traveled, diff_left_and_right, 0) 
 
         if distance_traveled >= target_meters * 0.99:
             print("Target Reached")
@@ -131,9 +131,9 @@ def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
     # Initialize ROS & MAVLink
     scan, node1, node2 = depth_analysis.intialize_ros()
 
-    general_functions.arm_and_takeoff(target_altitude)
+    general_functions.ArmDrone(vehicle, target_altitude)
     vehicle.airspeed = 0.5
-    general_functions.goto_target_body_ned(target_meters, 0, 0)
+    general_functions.GoToTargetBody(vehicle, target_meters, 0, 0)
 
     while vehicle.mode.name == "GUIDED_NOGPS":
         
@@ -152,7 +152,7 @@ def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
 
         if ((currentLocation.alt > target_altitude + 0.5) | (currentLocation.alt < target_altitude - 0.5)):
             diff_in_altitude = currentLocation.alt - target_altitude
-            general_functions.goto_target_body_ned(0, 0, diff_in_altitude)
+            general_functions.GoToTargetBody(vehicle, 0, 0, diff_in_altitude)
             
             reachedElevation = False
             while reachedElevation == False:  # While the target elevation has not been reached
@@ -165,11 +165,11 @@ def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
                     reachedElevation = True
                 time.sleep(1)
                 
-            general_functions.goto_target_body_ned(target_meters - distance_traveled, 0, 0)
+            general_functions.GoToTargetBody(vehicle, target_meters - distance_traveled, 0, 0)
 
         if ((currentLocation.lat > half_field -2) | (currentLocation.lat < half_field + 2)):
             diff_left_and_right = home_location.lat - currentLocation.lat #calculates distance from the center of start position
-            general_functions.goto_target_body_ned(target_meters - distance_traveled, diff_left_and_right, 0)
+            general_functions.GoToTargetBody(vehicle, target_meters - distance_traveled, diff_left_and_right, 0)
 
         if distance_traveled >= target_meters*0.99:
             print("Target Reached")
@@ -178,9 +178,9 @@ def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
         time.sleep(1)
 
 def main():
-    target_meters = general_functions.yards_to_meters(10)
-    target_altitude = general_functions.feet_to_meters(3)
-    field_width = general_functions.yards_to_meters(9)
+    target_meters = general_functions.YardsToMeters(10)
+    target_altitude = general_functions.FeetToMaters(3)
+    field_width = general_functions.YardsToMeters(9)
 
     print("Connecting To Drone...")
     #vehicle = connect('127.0.0.1:14550', wait_ready=True)
