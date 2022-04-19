@@ -227,7 +227,7 @@ image_zed = sl.Mat()
 depth_image_zed = sl.Mat()
 point_cloud = sl.Mat()
 
-#gd.ServoMovement(vehicle, 90)
+gd.ServoMovement(vehicle, 90)
 
 if (current_challenge == 3):
     home_location = vehicle.location.global_relative_frame
@@ -240,7 +240,7 @@ if (current_challenge == 3):
     vehicle.airspeed = 0.5
     goto_target_body_ned(target_meters, 0, 0)
 
-    while vehicle.mode.name == "GUIDED_NOGPS":
+    while vehicle.mode.name == "GUIDED":
         
         currentLocation = vehicle.location.global_relative_frame
         distance_traveled = get_distance_metres(currentLocation, home_location)
