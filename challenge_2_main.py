@@ -6,14 +6,18 @@ from Utils import AdvancedLogger, DummyVehicle, calculateVisitPath
 import pyzed.sl as sl
 
 from tqdm import tqdm
-#import chall2_test
-#print(vars(chall2_test))
-#import GeneralDroneFunctions
+
 dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     import DummyGeneralFunctions as gd    
 else:
     import GeneralDroneFunctions as gd #TODO REANABLE FOR FLIGHT
+
+precLoiter = False
+avgHome = True
+if precLoiter and avgHome:
+    sys.exit("Precision Loiter and Average Relative Position homing cannot both be enabled")
+
 from GeneralDroneFunctions import ServoMovement
 from LogoDetection import detectLogo
 from POI import POI_Tracker
@@ -98,7 +102,7 @@ async def mainFunc():
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
-        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 2.5) # overcast darkish day 2.2-3.5 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 1.5) # overcast darkish day 2.5 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
         cam.set_camera_settings(sl.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
         cam.set_camera_settings(sl.VIDEO_SETTINGS.WHITEBALANCE_TEMPERATURE, -1) #(2800, 6500), -1 is auto
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
@@ -157,14 +161,15 @@ async def mainFunc():
         new_pos = base_pos + (Rotation.from_euler('Z', [vehicle.heading], degrees=True).apply(y2m(field_corners_y))[:,0:2])
         logger.debug(f"Calculated base UTM {base_pos} with {zl} {zn} ")
         logger.debug(f"Relative field coordinates {Rotation.from_euler('Z', [-vehicle.heading], degrees=True).apply(y2m(field_corners_y))[:,0:2]}")
-        
+        #Calculate middle coords
+        averaged = np.average(new_pos, axis=0) 
         coords_lat = np.zeros((4,2))
         geoTracker = GeoTracker(corners=new_pos)
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
-        if dummyDrone == False:
-            vehicle.parameters['ANGLE_MAX'] = 3*1000 # Angle in centidegress TODO REANABLE FOR FLIGHT
-        await asyncio.sleep(5)
+        #if dummyDrone == False:
+        #    vehicle.parameters['ANGLE_MAX'] = 3*1000 # Angle in centidegress TODO REANABLE FOR FLIGHT
+        await asyncio.sleep(3)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
         gd.ServoMovement(vehicle, 90+fcam_angle)
@@ -172,7 +177,8 @@ async def mainFunc():
             print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62)
             print("Goto body")
-            await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
+            #await gd.GoToGlobal(vehicle, averaged) #coords will probably have to be a different format (averaged variable)
+            #await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
             print("Finished Liftoff and Move to Center")
             
         lft_off_task = asyncio.create_task(liftOffAndMoveToCenter())
@@ -205,7 +211,7 @@ async def mainFunc():
     with MissionContext("POI Search"):
         # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
         fail_count = 0
-        rotate_time = 26
+        rotate_time = 3
         spin_started = False
          # Command the vehicle to rotate 360 degrees over 12 seconds
         rot_start_time = 0
@@ -232,7 +238,7 @@ async def mainFunc():
                 #print("If statement to spin")
                 if lft_off_task.done() and not spin_started:
                     print("Spin")
-                    gd.SetConditionYaw(vehicle, 360, relative = True, speed = 15)#speed = 360//rotate_time) Commented part makes speed 24 deg/sec
+                    #gd.SetConditionYaw(vehicle, 360, relative = True, speed = 15)#speed = 360//rotate_time) Commented part makes speed 24 deg/sec
                     rot_start_time = time.time()
                     spin_started = True
                 elif lft_off_task.done() and spin_started and (time.time() - rot_start_time) > (sim_multiplier*rotate_time+1):
@@ -322,9 +328,24 @@ async def mainFunc():
         # gd.GoToTargetBody(vehicle, 0, 0.5, 0) # TODO: Remove. only for testing
         # gd.SetConditionYaw(vehicle, vehicle.heading)
 
+
+        precLoiterTimeStart = 0
+        precLoiterTimeLimit = 10
         fail_count = 0
         # Switch vehicle to landing mode and enable "precision" landing
-        gd.StartPrecisionLanding(vehicle)
+        if not avgHome:
+            gd.StartPrecisionLanding(vehicle)
+        else:
+            gd.Stop(vehicle)
+
+        if precLoiter:
+            print("channel values: ", vehicle.channels)
+            vehicle.channels.overrides = {'7':1900} # Enable precision loiter aux switch
+            print("channel value: ", vehicle.channels['7'])
+
+        horizontal_home_done = False
+        logo_relative_avg = np.array([0.0,0.0,0.0]).flatten()
+        logo_relative_avg_num = 0
         while True:
         # async for ftemp in cam_down.subscribe():
             frame_acq_start = time.time()
@@ -365,18 +386,50 @@ async def mainFunc():
                     cv2.circle(img, logo_center.astype(np.int32).flatten(), 15, (255, 255, 0), 4)
                     logo_position_relative = pixCoordToRelativePosition(vehicle, down_cam_info, logo_center)
                     logo_x_angle, logo_y_angle = pixCoordToAngle(logo_center, down_cam_info.hfov, down_cam_info.vfov, down_cam_info.resolution[0], down_cam_info.resolution[1])
+                    logger.debug(f"XY Angle {logo_x_angle} {logo_y_angle}")
                     Utils.dumpDebugData("logo_seek", logo_found=logo_found, x_l=logo_center.item(0), y_l=logo_center.item(1),
                         x_lr=logo_position_relative.flatten().item(0), y_lr=logo_position_relative.flatten().item(1),
                         dist=float(np.linalg.norm(logo_position_relative)), mission_time=mtime)
                     telem_logger.writeValues(logo_info=dict(logo_found=logo_found, x_l=logo_center.item(0), y_l=logo_center.item(1),
                         x_lr=logo_position_relative.flatten().item(0), y_lr=logo_position_relative.flatten().item(1),
                         dist=float(np.linalg.norm(logo_position_relative))))
+
+                    if not avgHome and not precLoiter: #Original guidance approach
+                        gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
+
+                    if precLoiter: #Using precision loiter for guidance
+                        if precLoiterTimeStart == 0: #Mark beginning of precision loiter phase
+                            print("Starting precision loiter guidance phase timer")
+                            logger.info("Starting precision loiter guidance phase timer")
+                            precLoiterTimeStart = time.time()
+
+                        gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
+                        
+                        if (time.time() - precLoiterTimeStart) > precLoiterTimeLimit:
+                            print("Ending precision loiter phase")
+                            logger.info("Ending precision loiter phase")
+                            vehicle.channels.overrides['15'] = 1000 # Disable precision loiter aux switch
+
+
+                        
                 
-                    if np.linalg.norm(logo_position_relative*np.array([1,1,0])) < landing_tolerance:
-                        logger.info(f"Horizontal distance of {np.linalg.norm(logo_position_relative)} within {landing_tolerance}m tolerance. Begin Descent")
-                        # gd.LandDrone(vehicle)
+                    if avgHome and not horizontal_home_done:
+                        logo_relative_avg += logo_position_relative.flatten()
+                        logo_relative_avg_num += 1
+                        logger.debug(f"Averaged logo relative position {logo_relative_avg_num} times")
+                        print(f"Averaged logo relative position {logo_relative_avg_num} times")
+                        if logo_relative_avg_num == 30:
+                            logo_relative_avg = logo_relative_avg / logo_relative_avg_num
+                            logo_relative_avg[2] = 0
+                            logger.info(f"Performing Horizontal homing by {0 - logo_relative_avg[0]} {0 - logo_relative_avg[1]}")
+                            print(f"Performing Horizontal homing by {0 - logo_relative_avg[0]} {0 -logo_relative_avg[1]}")
+                            gd.SetGuided(vehicle)
+                            await gd.GoToTargetBody(vehicle, 0 - logo_relative_avg[1], 0 - logo_relative_avg[0], 0, stop_speed=0.04)
+                            gd.StartPrecisionLanding(vehicle)
+                            horizontal_home_done = True
+                    else:
+                        gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                 
-                    gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                     # gd.MoveRelative(vehicle, logo_position_relative[0, [1,0,2]] * np.array([1, 1, 0])*0.5)
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
                 if dummyDrone == True:

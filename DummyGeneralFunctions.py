@@ -23,11 +23,11 @@ def ConnectToCopter(connection_string):
 
 def ArmDrone(vehicle):
     logger.debug(f"Attempted to arm vehicle. Sleeping 5s to simulate")
-    time.sleep(5)
+    time.sleep(1)
     
 async def TakeOffDrone(vehicle, elevation):
     logger.debug(f"Attempted takeoff to height of {elevation}. Sleeping 4s to simulate.")
-    await asyncio.sleep(4)
+    await asyncio.sleep(1)
     
 
 def FrameVelocityControl(vehicle, velX, velY, velZ):
@@ -91,15 +91,15 @@ def LandDrone(vehicle):
 
 async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
     logger.debug(f"Attempted go to target body {north} {east} {down} {stop_speed} -- Sleeping 4s")
-    await asyncio.sleep(4)
+    await asyncio.sleep(2)
 
 async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_distance=1, time_out=20):
     logger.debug(f"Attempted go to global {list(coords)} {stop_speed} {stop_distance} {time_out} -- Sleeping 4s")
-    await asyncio.sleep(4)
+    await asyncio.sleep(2)
 
 def MoveRelative(vehicle, pos):
     logger.debug(f"Attempted move relative {list(pos)} -- Sleeping 4s")
-    time.sleep(4)
+    time.sleep(2)
 
 
 def GetDistanceInMeters(vehicle, aLoc1, aLoc2):
@@ -132,6 +132,9 @@ def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
 
 def StartPrecisionLanding(vehicle):
     logger.debug("Attempted start precision land")
+
+def Stop(vehicle):
+    logger.debug("Attempted to stop vehicle")
 
 def SetROI(loc):
    logger.debug(f"Attempted set ROI {loc}")

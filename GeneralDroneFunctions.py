@@ -190,7 +190,7 @@ def LandDrone(vehicle):
 	
     print("The copter has landed!")
 
-async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
+async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1): #north is Y east is Xs
     """
         Send command to request the vehicle fly to a specified
         location in the North, East, Down frame of the drone's body. So north is direction that
@@ -356,8 +356,14 @@ def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
 def StartPrecisionLanding(vehicle):
     vehicle.parameters['PLND_ENABLED'] = 1 # Enable precision landing
     vehicle.parameters['PLND_TYPE'] = 1 # Optical fiducial tracking
-    vehicle.parameters['ANGLE_MAX'] = 2.5*1000 # Angle in centidegress
+    #vehicle.parameters['ANGLE_MAX'] = 2.5*1000 # Angle in centidegress
     vehicle.mode = VehicleMode("LAND")
+
+def Stop(vehicle):
+    vehicle.mode = VehicleMode("BRAKE")
+    
+def SetGuided(vehicle):
+    vehicle.mode = VehicleMode("GUIDED")
 
 def SetROI(loc):
     """ Set ROI command to point camer gimbal at a specified region of interest, drone must also turn to face ROI
