@@ -15,7 +15,7 @@ import cv2
 
 
 # Bench Testing
-dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
+dummyDrone = False # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     import src.challenge_2.DummyGeneralFunctions as gd    
 else:
