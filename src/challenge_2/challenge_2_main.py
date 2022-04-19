@@ -6,9 +6,7 @@ from Utils import AdvancedLogger, DummyVehicle, calculateVisitPath
 import pyzed.sl as sl
 
 from tqdm import tqdm
-#import chall2_test
-#print(vars(chall2_test))
-#import GeneralDroneFunctions
+
 dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     import DummyGeneralFunctions as gd    
