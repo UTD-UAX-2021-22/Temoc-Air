@@ -12,12 +12,14 @@ import sys
 import pyzed.sl as sl
 from ctypes import *
 import cv2
+
+
+# Bench Testing
 dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     import src.challenge_2.DummyGeneralFunctions as gd    
 else:
     import src.challenge_2.GeneralDroneFunctions as gd 
-
 
 current_challenge = 4
 
