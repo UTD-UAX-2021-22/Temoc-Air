@@ -263,7 +263,7 @@ if (current_challenge == 3):
 
 
 
-else if (current_challenge == 4):
+elif (current_challenge == 4):
 
     # Enable positional tracking with default parameters
     tracking_parameters = sl.PositionalTrackingParameters()
