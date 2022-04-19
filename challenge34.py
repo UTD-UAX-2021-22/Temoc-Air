@@ -12,6 +12,7 @@ import sys
 #import pyzed.sl as sl
 from ctypes import *
 import cv2
+import src/challenge_2/GeneralDroneFunctions.py as gd
 
 current_challenge = 3
 
@@ -180,7 +181,8 @@ target_altitude = feet_to_meters(3)
 field_width = yards_to_meters(50)
 
 #connect to vehicle and get the current
-vehicle = connect('127.0.0.1:14550', wait_ready=True)
+#vehicle = connect('127.0.0.1:14550', wait_ready=True)
+vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
 
 #OA PArameters
 vehicle.parameters["OA_DB_EXPIRE"] = 15
@@ -216,7 +218,7 @@ image_zed = sl.Mat(image_size.width, image_size.height, sl.MAT_TYPE.U8_C4)
 depth_image_zed = sl.Mat(image_size.width, image_size.height, sl.MAT_TYPE.U8_C4)
 point_cloud = sl.Mat()
 
-
+gd.ServoMovement(vehicle, 90)
 
 if (current_challenge == 3):
     home_location = vehicle.location.global_relative_frame
