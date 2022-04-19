@@ -253,7 +253,7 @@ if (current_challenge == 3):
 
         if ((currentLocation.lat > half_field -2) | (currentLocation.lat < half_field + 2)):
             diff_left_and_right = home_location.lat - currentLocation.lat #calculates distance from the center of start position
-            goto_target_body_ned(target_meters - distance_to_traveled, diff_left_and_right, 0) 
+            goto_target_body_ned(target_meters - distance_traveled, diff_left_and_right, 0) 
 
         if distance_traveled >= target_meters*0.99:
             print("Target Reached")
@@ -327,7 +327,7 @@ elif (current_challenge == 4):
 
         if ((currentLocation.lat > half_field -2) | (currentLocation.lat < half_field + 2)):
             diff_left_and_right = home_location.lat - currentLocation.lat #calculates distance from the center of start position
-            goto_target_body_ned(target_meters - distance_to_traveled, diff_left_and_right, 0)
+            goto_target_body_ned(target_meters - distance_traveled, diff_left_and_right, 0)
 
         if distance_traveled >= target_meters*0.99:
             print("Target Reached")
