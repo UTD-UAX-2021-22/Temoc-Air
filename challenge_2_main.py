@@ -176,6 +176,7 @@ async def mainFunc():
         async def liftOffAndMoveToCenter():
             print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62)
+            await asyncio.sleep(4) # sleep for yaw alignment
             print("Goto body")
             #await gd.GoToGlobal(vehicle, averaged) #coords will probably have to be a different format (averaged variable)
             await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
