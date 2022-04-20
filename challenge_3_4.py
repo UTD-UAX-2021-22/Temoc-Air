@@ -55,20 +55,27 @@ async def challenge_3(vehicle, target_meters, target_altitude, field_width):
 
     distance_traveled = 0
     currentLocation = home_location
+    vehicle.airspeed = 1.5 # Test Speed
 
     general_functions.ArmDrone(vehicle)
-    take_off = asyncio.create_task(general_functions.TakeOffDrone(vehicle, target_altitude))
+    
+    async def take_off_and_move():
+        print("Rising...")
+        await general_functions.TakeOffDrone(vehicle, target_altitude)
+    
+    take_off = asyncio.create_task(take_off_and_move())
+    await asyncio.sleep(5)
     while not (take_off.done()):
         print("Await liftoff task")
         await asyncio.sleep(1)
         
-    vehicle.airspeed = 1.5 # Test Speed
+    print("Goto 50 Yard")
     general_functions.GoToTargetBody(vehicle, target_meters, 0, 0)
 
     while vehicle.mode.name == "GUIDED":
-        
+
         currentLocation = vehicle.location.global_relative_frame
-        distance_traveled = general_functions.get_distance_metres(currentLocation, home_location)
+        distance_traveled = general_functions.GetDistanceInMeters(currentLocation, home_location)
         print("Distance traveled: ", distance_traveled)
 
         if ((currentLocation.alt > target_altitude + 0.5) | (currentLocation.alt < target_altitude - 0.5)):
@@ -135,15 +142,19 @@ async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width)
     currentLocation = home_location
     
     # Initialize ROS & MAVLink
-    scan, node1, node2 = depth_analysis.intialize_ros()
+    scan, laser_scan_node, point_cloud_node, pointcloud = depth_analysis.intialize_ros()
 
-    general_functions.ArmDrone(vehicle)
-    take_off = asyncio.create_task(general_functions.TakeOffDrone(vehicle, target_altitude))
+    async def take_off_and_move():
+        print("Rising...")
+        await general_functions.TakeOffDrone(vehicle, target_altitude)
+    
+    take_off = asyncio.create_task(take_off_and_move())
+    await asyncio.sleep(5)
     while not (take_off.done()):
         print("Await liftoff task")
         await asyncio.sleep(1)
         
-    vehicle.airspeed = 0.5
+    print("Goto 50 Yard")
     general_functions.GoToTargetBody(vehicle, target_meters, 0, 0)
 
     while vehicle.mode.name == "GUIDED_NOGPS":
@@ -155,10 +166,10 @@ async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width)
         tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
         
         # Start depth analysis here?
-        depth_analysis.depth_sector(cam, sector_mat, point_cloud_mat, scan, node1, node2)
+        depth_analysis.depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_cloud_node, pointcloud, runtime_parameters)
 
         currentLocation.set(tx, ty, tz)
-        distance_traveled = general_functions.get_distance_metres(currentLocation, home_location)
+        distance_traveled = general_functions.GetDistanceInMeters(currentLocation, home_location)
         print("Distance traveled: ", distance_traveled)
 
         if ((currentLocation.alt > target_altitude + 0.5) | (currentLocation.alt < target_altitude - 0.5)):
@@ -188,7 +199,7 @@ async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width)
 
         time.sleep(1)
 
-def main():
+async def main():
     target_meters = general_functions.YardsToMeters(10)
     target_altitude = general_functions.FeetToMeters(3)
     field_width = general_functions.YardsToMeters(9)
@@ -214,7 +225,9 @@ def main():
     
     # Start the correct challenge
     if CURRENT_CHALLENGE == 3:
-        challenge_3(vehicle, target_meters, target_altitude, field_width)
+        loop = asyncio.get_event_loop()
+        asyncio.ensure_future(challenge_3(vehicle, target_meters, target_altitude, field_width))
+        loop.run_forever()
     elif CURRENT_CHALLENGE == 4:
         print("Intializing & Opening ZED Camera...")
         #ZED SDK Parameters
@@ -234,21 +247,29 @@ def main():
                 print(repr(status))
                 cam.close()
                 exit()
+        else:
+            print("ZED Camera is Already Open")
         
         # Create and set RuntimeParameters after opening the camera
         runtime_parameters = stereolabs.RuntimeParameters()
-        runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.FILL
+        runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.STANDARD
         
         # Setting the depth confidence parameters
         runtime_parameters.confidence_threshold = 100
         runtime_parameters.textureness_confidence_threshold = 100
         print("ZED Camera Opened & Intialized")
-        challenge_4(cam, vehicle, target_meters, target_altitude, field_width)
+        
+        loop = asyncio.get_event_loop()
+        asyncio.ensure_future(challenge_4(cam, vehicle, target_meters, target_altitude, field_width, runtime_parameters))
+        loop.run_forever()
+        
+        cam.disable_positional_tracking()
+        cam.close()
     
     general_functions.LandDrone(vehicle)
     vehicle.close() #stop copter from running
-    cam.disable_positional_tracking()
-    cam.close()
 
 if __name__ == "__main__":
-    main()
+    loop = asyncio.get_event_loop()
+    asyncio.ensure_future(main())
+    loop.run_forever()

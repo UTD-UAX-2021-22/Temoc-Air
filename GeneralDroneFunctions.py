@@ -190,7 +190,7 @@ def LandDrone(vehicle):
 	
     print("The copter has landed!")
 
-async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1): #north is Y east is Xs
+async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
     """
         Send command to request the vehicle fly to a specified
         location in the North, East, Down frame of the drone's body. So north is direction that
@@ -278,8 +278,7 @@ def MoveRelative(vehicle, pos):
 	# send command to vehicle
     vehicle.send_mavlink(msg)
 
-
-def GetDistanceInMeters(vehicle, aLoc1, aLoc2):
+def GetDistanceInMeters(aLoc1, aLoc2):
     """ Returns the ground distance in metres between two LocationGlobal objects.
         This method is an approximation, and will not be accurate over large distances and close to the
         earth's poles. It comes from the ArduPilot test code:
@@ -356,14 +355,8 @@ def UpdateLandingTargetPosition(vehicle: Vehicle, x, y, z):
 def StartPrecisionLanding(vehicle):
     vehicle.parameters['PLND_ENABLED'] = 1 # Enable precision landing
     vehicle.parameters['PLND_TYPE'] = 1 # Optical fiducial tracking
-    #vehicle.parameters['ANGLE_MAX'] = 2.5*1000 # Angle in centidegress
+    vehicle.parameters['ANGLE_MAX'] = 2.5*1000 # Angle in centidegress
     vehicle.mode = VehicleMode("LAND")
-
-def Stop(vehicle):
-    vehicle.mode = VehicleMode("BRAKE")
-    
-def SetGuided(vehicle):
-    vehicle.mode = VehicleMode("GUIDED")
 
 def SetROI(loc):
     """ Set ROI command to point camer gimbal at a specified region of interest, drone must also turn to face ROI
@@ -408,74 +401,3 @@ def ServoMovement(vehicle, position):
         0
         )
     vehicle.send_mavlink(msg)
-
-
-
-"""
-----------------------
--------- Main --------
-----------------------
-
-# Connect to vehicle UDP endpoint for simulator
-# vehicle = connect('127.0.0.1:14550', wait_ready=True)
-# Connect to vehicle over com port serial
-vehicle = connect('/dev/serial0', wait_ready=True, baud=921600)
-
-# TODO: add function or code here that asks for user input on what challenge to run 
-# EX: print "1. Test" , "2. Challenge 1" , "3.." etc. for all challenge functions
-# Ask user which one of these to run, get their input and set it as curMode with a switch statement or whatever
-
-curMode = "CHALLENGE1_TEST" # Set to "GROUND" when not testing
-wayPointCount = 0
-
-#while True:
-if curMode == "GROUND":
-	time.sleep(2)
-	if wayPointCount > 0: # exampl if else for determing challenge not functional right now
-		print("Valid Challenge Uploaded -> Procees")
-		curMode = "CHALLENGE1_TEST"
-elif curMode == "CHALLENGE1_TEST":
-	targetMeters = YardsToMeters(30)
-	targetAltitude = FeetToMeters(15)
-    
-	ArmDrone()
-	TakeOffDrone(targetAltitude)
-	homeLocation = vehicle.location.global_relative_frame
-	vehicle.airspeed = 4
-
-	#Fly North for 10 seconds
-	FrameVelocityControl(targetMeters, 0, 0)
-
-	GoToTargetBody(targetMeters, 0, 0)
-    
-	while vehicle.mode.name == "GUIDED":
-		distanceTraveled = GetDistanceInMeters(vehicle.location.global_relative_frame, homeLocation)
-		print(f"Distance traveled: {distanceTraveled}")
-		if distanceTraveled >= YardsToMeters(30) * 0.99:
-			print("Target Reached")
-			print(f"Final distance traveled: {distanceTraveled}")
-			break
-		time.sleep(1)
-
-	LandDrone()
-	vehicle.close() #stop copter from running
-elif curMode == "BASIC_TEST":
-	# Prep drone for flight and rise to a altidude of 15
-	ArmDrone()
-	TakeOffDrone(15)
-
-	# Rn this just switches the vehicle mode to AUTO
-	#GetCurrentChallenge(vehicle)
-
-	# Fly North and up
-	FrameVelocityControl(2, 0, -0.5)
-
-	# Print various telemetry data
-	PrintTelemetry()
-
-	# Land Drone wherever it currently is at
-	LandDrone()
-
-	# Stop copter from running
-	vehicle.close()
-"""
