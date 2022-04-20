@@ -167,8 +167,8 @@ async def mainFunc():
         geoTracker = GeoTracker(corners=new_pos)
         coords_lat[:,0], coords_lat[:,1] = utm.to_latlon(new_pos[:,0], new_pos[:,1], zl, zn)
         print(f"Field Corners: {coords_lat}")
-        #if dummyDrone == False:
-        #    vehicle.parameters['ANGLE_MAX'] = 3*1000 # Angle in centidegress TODO REANABLE FOR FLIGHT
+        if dummyDrone == False:
+            vehicle.parameters['ANGLE_MAX'] = 3*1000 # Angle in centidegress TODO REANABLE FOR FLIGHT
         await asyncio.sleep(3)
         #print("Sleep Done")
         gd.ArmDrone(vehicle) # Arm Vehicle
@@ -178,7 +178,7 @@ async def mainFunc():
             await gd.TakeOffDrone(vehicle, 7.62)
             print("Goto body")
             #await gd.GoToGlobal(vehicle, averaged) #coords will probably have to be a different format (averaged variable)
-            #await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
+            await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
             print("Finished Liftoff and Move to Center")
             
         lft_off_task = asyncio.create_task(liftOffAndMoveToCenter())
@@ -211,7 +211,7 @@ async def mainFunc():
     with MissionContext("POI Search"):
         # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
         fail_count = 0
-        rotate_time = 3
+        rotate_time = 26
         spin_started = False
          # Command the vehicle to rotate 360 degrees over 12 seconds
         rot_start_time = 0
@@ -238,7 +238,7 @@ async def mainFunc():
                 #print("If statement to spin")
                 if lft_off_task.done() and not spin_started:
                     print("Spin")
-                    #gd.SetConditionYaw(vehicle, 360, relative = True, speed = 15)#speed = 360//rotate_time) Commented part makes speed 24 deg/sec
+                    gd.SetConditionYaw(vehicle, 360, relative = True, speed = 15)#speed = 360//rotate_time) Commented part makes speed 24 deg/sec
                     rot_start_time = time.time()
                     spin_started = True
                 elif lft_off_task.done() and spin_started and (time.time() - rot_start_time) > (sim_multiplier*rotate_time+1):
