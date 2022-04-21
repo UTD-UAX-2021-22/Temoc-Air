@@ -249,7 +249,7 @@ if __name__ == "__main__":
     print(calculateVisitPath(test_pois, start))
     import plotly.express as px
 
-    gp = calculateGridSearch(direction=1, start=(0,0))
+    gp = calculateGridSearch(field_dims=(53.333/2, 50), border=2, max_run_space=9, direction=0) - np.array([53.333/4, 0])
     print(gp)
 
     fig = px.line(x=gp[:,0], y=gp[:,1],text=np.arange(0, gp.shape[0]))
