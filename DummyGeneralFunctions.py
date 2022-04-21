@@ -142,6 +142,12 @@ def SetROI(loc):
 def ServoMovement(vehicle, position):
     logger.debug(f"Attempted set servo position {position}")
 
+def SetGuided(vehicle):
+    logger.debug(f"Attempted set guided")
+
+async def FollowGlobalPath(vehicle: Vehicle, coords, **kwargs):
+    logger.debug(f"(sleeping 10s) Attempted follow path {coords} with kwargs {kwargs}")
+    await asyncio.sleep(10)
 
 
 """

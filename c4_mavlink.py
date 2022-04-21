@@ -12,7 +12,8 @@
         rosrun challenge4 c4_mavlink.py
         
     Terminal #3:
-        roslaunch mavoros apm.launch fcu_url:="/dev/ttyTHS2:1500000"
+        source devel/setup.bash
+        roslaunch mavros apm.launch fcu_url:="/dev/ttyTHS2:1500000"
         
     Terminal #4:
         source devel/setup.bash (only need to do this once after can run bottom cmd multiple times)
@@ -31,6 +32,7 @@ import argparse
 import threading
 import rospy
 
+from dronekit import connect
 from time import sleep
 from apscheduler.schedulers.background import BackgroundScheduler
 from pymavlink import mavutil
@@ -44,7 +46,7 @@ CONNECTION_DEFAULT_BAUD = 115200
 
 # Enable/disable each message/function individually
 enable_3D_msg_obstacle_distance = False
-obstacle_distance_msg_hz_default = 35.0 # This needs to be tuned
+obstacle_distance_msg_hz_default = 15.0 # This needs to be tuned
 curr_avoid_strategy = "bendyruler"
 prev_avoid_strategy = ""
 
@@ -190,32 +192,32 @@ def fltmode_msg_callback(value):
     global distances, AC_VERSION_41
     dist_arr = [0] * 72
     curr_flight_mode = (value.base_mode, value.custom_mode)
-    #if curr_flight_mode[0] == 89:
-    print(f"Value : {value}")
-    print(f"Flight Mode: {curr_flight_mode}")
-    # print(f"Avoid Strat: {curr_avoid_strategy}")
-    if ((curr_flight_mode[1] == 5) or (curr_flight_mode[1] == 2)): # Loiter and AltHold only
-        curr_avoid_strategy="simple_avoid"
-        if (curr_avoid_strategy != prev_avoid_strategy):
-            if ((AC_VERSION_41 == True) and (curr_flight_mode[1] == 5)): # only AC 4.1 or higher and LOITER
-                enable_3D_msg_obstacle_distance = True
-                print(enable_3D_msg_obstacle_distance)
-                send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
-            prev_avoid_strategy = curr_avoid_strategy
-    elif ((curr_flight_mode[1] == 3) or (curr_flight_mode[1] == 4) or (curr_flight_mode[1] == 6)): # for Auto Guided and RTL modes
-        curr_avoid_strategy = "bendyruler"
-        if (curr_avoid_strategy != prev_avoid_strategy):
-            if (AC_VERSION_41 == True): # only AC 4.1 or higher
-                enable_3D_msg_obstacle_distance = True
-                print(enable_3D_msg_obstacle_distance)
-                send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
-            prev_avoid_strategy = curr_avoid_strategy
-    elif (curr_flight_mode[0] != 0):
-        curr_avoid_strategy = "none"
-        if (curr_avoid_strategy != prev_avoid_strategy):
-            enable_3D_msg_obstacle_distance = False
-            send_msg_to_gcs('No valid flt mode for obstacle avoidance')
-            prev_avoid_strategy = curr_avoid_strategy
+    #print(f"Value : {value}")
+    #print(f"Flight Mode: {curr_flight_mode}")
+    if curr_flight_mode[0] == 89:
+        # print(f"Avoid Strat: {curr_avoid_strategy}")
+        if ((curr_flight_mode[1] == 5) or (curr_flight_mode[1] == 2)): # Loiter and AltHold only
+            curr_avoid_strategy="simple_avoid"
+            if (curr_avoid_strategy != prev_avoid_strategy):
+                if ((AC_VERSION_41 == True) and (curr_flight_mode[1] == 5)): # only AC 4.1 or higher and LOITER
+                    enable_3D_msg_obstacle_distance = True
+                    print(enable_3D_msg_obstacle_distance)
+                    send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
+                prev_avoid_strategy = curr_avoid_strategy
+        elif ((curr_flight_mode[1] == 3) or (curr_flight_mode[1] == 4) or (curr_flight_mode[1] == 6)): # for Auto Guided and RTL modes
+            curr_avoid_strategy = "bendyruler"
+            if (curr_avoid_strategy != prev_avoid_strategy):
+                if (AC_VERSION_41 == True): # only AC 4.1 or higher
+                    enable_3D_msg_obstacle_distance = True
+                    print(enable_3D_msg_obstacle_distance)
+                    send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
+                prev_avoid_strategy = curr_avoid_strategy
+        elif (curr_flight_mode[0] != 0):
+            curr_avoid_strategy = "none"
+            if (curr_avoid_strategy != prev_avoid_strategy):
+                enable_3D_msg_obstacle_distance = False
+                send_msg_to_gcs('No valid flt mode for obstacle avoidance')
+                prev_avoid_strategy = curr_avoid_strategy
 
 # Listen to ZED ROS node for SLAM data
 def data_callback_from_zed(msg):
@@ -238,10 +240,10 @@ def sector_data_callback(msg):
         mavlink_obstacle_coordinates[j][0] = msg.points[j].z
         mavlink_obstacle_coordinates[j][1] = (msg.points[j].x)
         mavlink_obstacle_coordinates[j][2] = (-1 * msg.points[j].y)
-        dist_debug[j] = m.sqrt(mavlink_obstacle_coordinates[j][0] * mavlink_obstacle_coordinates[j][0] + mavlink_obstacle_coordinates[j][1] * mavlink_obstacle_coordinates[j][1] + mavlink_obstacle_coordinates[j][2] * mavlink_obstacle_coordinates[j][2]) - 0.45
+        # dist_debug[j] = m.sqrt(mavlink_obstacle_coordinates[j][0] * mavlink_obstacle_coordinates[j][0] + mavlink_obstacle_coordinates[j][1] * mavlink_obstacle_coordinates[j][1] + mavlink_obstacle_coordinates[j][2] * mavlink_obstacle_coordinates[j][2]) - 0.45
     #print("\033c")
     #print(min_depth_cm, max_depth_cm)
-    #print (mavlink_obstacle_coordinates)
+    # print (mavlink_obstacle_coordinates)
     # print (dist_debug)
 
 
@@ -268,7 +270,7 @@ send_msg_to_gcs('ROS node connected')
 sleep(1) # wait until the ROS node has booted
 # register the callbacks
 mavlink_callbacks = {
-    'ATTITUDE': att_msg_callback,
+    #'ATTITUDE': att_msg_callback,
     'HEARTBEAT': fltmode_msg_callback,
 }
 mavlink_thread = threading.Thread(target=mavlink_loop, args=(conn, mavlink_callbacks))

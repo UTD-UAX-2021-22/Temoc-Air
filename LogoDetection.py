@@ -145,15 +145,27 @@ class LogoDetector:
         self.logger.debug(f"Created OpenCV board from template")
         pass
 
-    def processFrame(self, vehicle, frame_bgr) -> Tuple[bool, Any]:
-        logo_detected, det_dict, detType, num_found = detectLogo(frame_bgr, self.template_ids, self.cv_board, draw=True, totalMarkers=250)
+    def processFrame(self, vehicle, frame_bgr) -> Tuple[bool, Any, Any]:
+        logo_detected, det_dict, detType, num_found = detectLogo(frame_bgr, self.template_ids, self.cv_board, draw=False, totalMarkers=250)
         if logo_detected:
             h_mat = comp_homograph(det_dict, self.homography_dict)
             # print(np.atleast_2d(np.array(temp_center)))
+            original_bbox = np.atleast_3d(np.array([
+                [self.homography_center[0]*2, self.homography_center[1]*2],
+                [0, self.homography_center[1]*2],
+                [self.homography_center[0]*2, 0],
+                [0,0]
+            ], dtype="float32")).reshape(-1,1,2)
             new_center: np.ndarray = cv2.perspectiveTransform(np.atleast_3d(np.array(self.homography_center, dtype='float32')).reshape(-1,1,2), h_mat)
-            return True, new_center.flatten()
+            new_bbox = cv2.perspectiveTransform(original_bbox, h_mat)
+            new_bbox = new_bbox[:,0,:]
+            bbox_max = np.max(new_bbox, axis=0)
+            bbox_min = np.min(new_bbox, axis=0)
+            print(f"New bbox {new_bbox}")
+            print(f"Max: {bbox_max} -- Min: {bbox_min}")
+            return True, new_center.flatten(), [bbox_min[0], bbox_min[1], bbox_max[0] - bbox_min[0], bbox_max[1] - bbox_min[1]]
         else:
-            return False, np.array([0,0])
+            return False, np.array([0,0]), [0,0,0,0]
         
 
 
@@ -200,6 +212,7 @@ if __name__ == "__main__":
     cap = cv2.VideoCapture(args.video)
     text_org = (50, 100)
     font = cv2.FONT_HERSHEY_SIMPLEX
+    detector = LogoDetector(template_image)
     
 
     # detector = LogoDetector()
@@ -208,28 +221,38 @@ if __name__ == "__main__":
 
     while True:
         success, img = cap.read()
-        logo_detected, det_dict, detType, num_found = detectLogo(img, marker_ids, board)
-        if logo_detected:
-            size = img.shape[0:1]
-            h_mat = comp_homograph(det_dict, temp_dict)
-            # print(np.atleast_2d(np.array(temp_center)))
-            new_center: np.ndarray = cv2.perspectiveTransform(np.atleast_3d(np.array(temp_center, dtype='float32')).reshape(-1,1,2), h_mat)
-            # print(f"New center {new_center}")
-            cv2.circle(img, new_center.astype(np.int32).flatten(), 15, (255, 255, 0), 4)
+        logo_detected, center, bbox = detector.processFrame(None, img)
 
-            cv2.putText(img, f"Logo Found: {logo_detected} // IDs Detected: {det_dict.keys()}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-        else:
-            cv2.putText(img, f"Logo Found: {logo_detected} // IDs Detected ({num_found}): {det_dict.keys()}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        if logo_detected:
+            cv2.putText(img, f"Logo Found: {logo_detected}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            cv2.circle(img, np.asarray(center).astype(np.int32).flatten(), 15, (255, 255, 0), 4)
+
+            
+            cv2.rectangle(img, (int(bbox[0]), int(bbox[1])), (int(bbox[0]+ bbox[2]), int(bbox[1] + bbox[3])), (255, 0, 0), 4)
+
+
+        # logo_detected, det_dict, detType, num_found = detectLogo(img, marker_ids, board)
+        # if logo_detected:
+        #     size = img.shape[0:1]
+        #     h_mat = comp_homograph(det_dict, temp_dict)
+        #     # print(np.atleast_2d(np.array(temp_center)))
+        #     new_center: np.ndarray = cv2.perspectiveTransform(np.atleast_3d(np.array(temp_center, dtype='float32')).reshape(-1,1,2), h_mat)
+        #     # print(f"New center {new_center}")
+        #     cv2.circle(img, new_center.astype(np.int32).flatten(), 15, (255, 255, 0), 4)
+
+        #     cv2.putText(img, f"Logo Found: {logo_detected} // IDs Detected: {det_dict.keys()}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        # else:
+        #     cv2.putText(img, f"Logo Found: {logo_detected} // IDs Detected ({num_found}): {det_dict.keys()}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
         cv2.imshow('img', img)
 
         # mask = detector.processFrame(img)
         # if mask is None:
-        cv2.imshow('img', img)
+        # cv2.imshow('img', img)
         # else:
             # cv2.imshow('img', mask)
         # print(img)
         k = cv2.waitKey(1) & 0xff
-        logger.debug(f"Frame {frame_number} took {(time.perf_counter() -  frame_start)*1000}")
+        # logger.debug(f"Frame {frame_number} took {(time.perf_counter() -  frame_start)*1000}")
         frame_number += 1
 
         if k == 27:
