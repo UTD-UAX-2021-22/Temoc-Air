@@ -58,7 +58,7 @@ log.addHandler(log_file)
     TODO: Most likley the bounds pased to the function which are given by the current sector it is checking are wrong so it is only checking for distance in the middle of the sector
 """
 def get_object_depth(depth, bounds, sector_num):
-    area_div = 2 # How many pixels in the y direction to analyze
+    area_div = 5 # How many pixels in the y direction to analyze
 
     if sector_num <= 2:
         sector_num = 1
@@ -171,7 +171,7 @@ def initialize_ros():
     
     Initializes the cam stereo camera with the specified parameters and captures multiple images to create a depth map. Then calls other methods to perform analysis to determine the closets object and the distance in each sector of a 3x3 grid of the image.
 """
-def depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_cloud_node, ros_point_cloud, runtime_parameters):
+def depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_cloud_node, ros_point_cloud, runtime_parameters, width, height):
     # A new image is available to process if grab() returns SUCCESS
     if cam.grab(runtime_parameters) == stereolabs.ERROR_CODE.SUCCESS:
         cam.retrieve_image(sector_mat, stereolabs.VIEW.LEFT)

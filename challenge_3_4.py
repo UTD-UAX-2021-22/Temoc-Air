@@ -1,13 +1,13 @@
-from dronekit import connect, VehicleMode, LocationGlobalRelative, APIException
+from dronekit import connect
 import time
-import socket
-import math
-from pymavlink import mavutil
-import argparse  # Allows to input vals from command line to use them in python
-import numpy as np
-import threading
-import sys
-import asyncio
+# import socket
+# import math
+# from pymavlink import mavutil
+# import argparse  # Allows to input vals from command line to use them in python
+# import numpy as np
+# import threading
+# import sys
+# import asyncio
 from ctypes import *
 
 # Bench Testing
@@ -31,8 +31,10 @@ if CURRENT_CHALLENGE == 4:
 def transform_pose(pose, tx) :
   transform_ = stereolabs.Transform()
   transform_.set_identity()
+  
   # Translate the tracking frame by tx along the X axis
   transform_[0][3] = tx
+  
   # Pose(new reference frame) = M.inverse() * pose (camera frame) * M, where M is the transform between the two frames
   transform_inv = stereolabs.Transform()
   transform_inv.init_matrix(transform_)
@@ -99,14 +101,9 @@ async def challenge_3(vehicle, target_meters, target_altitude, field_width):
 
         time.sleep(1)
 
-async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width):
+async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width, cam_width, cam_height):
     print("Start Challenge 4")
     print("Setting ZED Parameters")
-    res_params = stereolabs.Resolution()
-    width = round(cam.get_camera_information().camera_resolution.width / 2)
-    height = round(cam.get_camera_information().camera_resolution.height / 2)
-    res_params.width = width
-    res_params.height = height
     
     # Enable positional tracking with default parameters
     tracking_parameters = stereolabs.PositionalTrackingParameters()
@@ -157,7 +154,7 @@ async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width)
         tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
         
         # Start depth analysis here?
-        depth_analysis.depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_cloud_node, pointcloud, runtime_parameters)
+        depth_analysis.depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_cloud_node, pointcloud, runtime_parameters, cam_width, cam_height)
 
         currentLocation.set(tx, ty, tz)
         distance_traveled = general_functions.GetDistanceInMeters(vehicle, currentLocation, home_location)
@@ -194,6 +191,7 @@ async def main():
     target_meters = general_functions.YardsToMeters(20) #50
     target_altitude = general_functions.FeetToMeters(3.5)
     field_width = general_functions.YardsToMeters(10) #50
+    
     print("Connecting To Drone...")
     if dummyDrone == True:
         vehicle = general_functions.DummyVehicle()
@@ -225,6 +223,7 @@ async def main():
         vehicle.parameters["PRX_TYPE"] = 2
         vehicle.parameters["PRX_ORIENT"] = 1
         print("Intializing & Opening ZED Camera...")
+        
         #ZED SDK Parameters
         cam = stereolabs.Camera()
         init_parameters = stereolabs.InitParameters()
@@ -252,9 +251,16 @@ async def main():
         # Setting the depth confidence parameters
         runtime_parameters.confidence_threshold = 100
         runtime_parameters.textureness_confidence_threshold = 100
+        
+        res_params = stereolabs.Resolution()
+        width = round(cam.get_camera_information().camera_resolution.width / 2)
+        height = round(cam.get_camera_information().camera_resolution.height / 2)
+        res_params.width = width
+        res_params.height = height
+    
         print("ZED Camera Opened & Intialized")
         
-        await challenge_4(cam, vehicle, target_meters, target_altitude, field_width, runtime_parameters)
+        await challenge_4(cam, vehicle, target_meters, target_altitude, field_width, runtime_parameters, width, height)
         
         cam.disable_positional_tracking()
         cam.close()
@@ -269,4 +275,3 @@ if __name__ == "__main__":
         loop.run_until_complete(main())
     finally:
         loop.close()
-
