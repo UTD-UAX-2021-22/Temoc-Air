@@ -203,25 +203,23 @@ def depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_
             sector[1] = y_step / 2 + gy
             sector[0] = x_step / 2 + gx
 
-            if i < 9:
-                # Get coordinates of closest object in a sector
-                x, y, z = get_object_depth(depth, sector, i)
-                sector_obstacle_coordinates[i][0] = x
-                sector_obstacle_coordinates[i][1] = y
-                sector_obstacle_coordinates[i][2] = z
+            # Get coordinates of closest object in a sector
+            x, y, z = get_object_depth(depth, sector, i)
+            sector_obstacle_coordinates[i][0] = x
+            sector_obstacle_coordinates[i][1] = y
+            sector_obstacle_coordinates[i][2] = z
 
             gy += y_step
             i += 1
 
             while gy < (height * 2):
-                if i < 9:
-                    sector[1] = y_step / 2 + gy
+                sector[1] = y_step / 2 + gy
         
-                    # Get coordinates of closest object in a sector
-                    x, y, z = get_object_depth(depth, sector, i)
-                    sector_obstacle_coordinates[i][0] = x
-                    sector_obstacle_coordinates[i][1] = y
-                    sector_obstacle_coordinates[i][2] = z
+                # Get coordinates of closest object in a sector
+                x, y, z = get_object_depth(depth, sector, i)
+                sector_obstacle_coordinates[i][0] = x
+                sector_obstacle_coordinates[i][1] = y
+                sector_obstacle_coordinates[i][2] = z   
 
                 gy += y_step
                 i += 1
