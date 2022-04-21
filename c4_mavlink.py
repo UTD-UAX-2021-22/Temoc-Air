@@ -1,43 +1,42 @@
 #!/usr/bin/env python3.9
 
-# might have to install newer version of pymavlink -> pymavlink5
-
-# First CMD = source devel/setup.bash
-# Start MAVROS = roslaunch mavors apm.launch fcu_url:="/dev/ttyTHS2:115200"
-# Set Flight Mode CMD = rosrun mavros mavsyst mode -c 5
+'''
+    Cmd Line Order (Can most likely put implement this as a function that auto runs commands)
+    Terminal #1:
+        source devel/setup.bash
+        rosrun mavros mavsyst mode -c 5 (might not need to do this if the flight mode change works as intended)
+        roscore
+        
+    Terminal #2:
+        source devel/setup.bash (only need to do this once after can run bottom cmd multiple times)
+        rosrun challenge4 c4_mavlink.py
+        
+    Terminal #3:
+        roslaunch mavoros apm.launch fcu_url:="/dev/ttyTHS2:1500000"
+        
+    Terminal #4:
+        source devel/setup.bash (only need to do this once after can run bottom cmd multiple times)
+        rosrun challenge4 c4_distance.py
+'''
 
 import sys
 import os
 os.environ["MAVLINK20"] = "2"
 
-# Import the libraries
 import numpy as np
 import math as m
-import signal
 import sys
 import time
 import argparse
 import threading
-import json
-from dronekit import connect
+import rospy
+
 from time import sleep
 from apscheduler.schedulers.background import BackgroundScheduler
 from pymavlink import mavutil
-import rospy
-from sensor_msgs.msg import LaserScan, PointCloud, ChannelFloat32
-from geometry_msgs.msg import Point32
+from sensor_msgs.msg import LaserScan, PointCloud
 
-# To obtain ip address
-import socket
-
-# Default configurations for connection to the FCU
-# Decide which board you are using to connect to the flight controller via mavlink:
-# If you are using the J17 connector on the Nvidia TX2 development board
-# then set CONNECTION_DEFAULT_STRING = /dev/ttyTHS2
-# if you are using the Auvidea J120 board, then set
-# CONNECTION_DEFAULT_STRING=/dev/ttyTHS1
-# if you are using mavlink_router include the IP address for the ROS connection here
-
+# Connection string for the FCU
 CONNECTION_DEFAULT_STRING = "/dev/ttyTHS2" #'127.0.0.1:14855'
 
 # Ideal baudrate for Mission Planner
@@ -45,48 +44,38 @@ CONNECTION_DEFAULT_BAUD = 115200
 
 # Enable/disable each message/function individually
 enable_3D_msg_obstacle_distance = False
-obstacle_distance_msg_hz_default = 35.0
-curr_avoid_strategy = "bendy_avoid"
+obstacle_distance_msg_hz_default = 35.0 # This needs to be tuned
+curr_avoid_strategy = "bendyruler"
 prev_avoid_strategy = ""
 
-# enable only if you are on Arducopter 4.1 or higher
+# Enable Arducopter 4.1 or higher
 AC_VERSION_41 = True
 
 # lock for thread synchronization
 lock = threading.Lock()
 
-mavlink_thread_should_exit = False
-
-# default exit code is failure - a graceful termination with a
-# terminate signal is possible.
+# Default exit code is failure
 exit_code = 1
 
-# Camera-related variables
-pipe = None
-depth_scale = 0
-depth_hfov_deg = None
-depth_vfov_deg = None
-
 # Data variables
+mavlink_thread_should_exit = False
 vehicle_pitch_rad = None
-data = None
-current_time_us = 0
+cur_time_in_us = 0
 start_time =  int(round(time.time() * 1000))
 current_milli_time = lambda: int(round(time.time() * 1000) - start_time)
-current_time_ms = current_milli_time()
-print(current_time_ms)
-current_time_ms = current_milli_time()
-last_obstacle_distance_sent_ms = 0  # value of current_time_us when obstacle_distance last sent
+cur_time_in_ms = current_milli_time()
+print(cur_time_in_ms)
+cur_time_in_ms = current_milli_time()
+last_obstacle_distance_sent_ms = 0  # value of cur_time_in_us when obstacle_distance last sent
 
 # Obstacle distances in front of the sensor, starting from the left in increment degrees to the right
-# See here: https://mavlink.io/en/messages/common.html#OBSTACLE_DISTANCE
+# Link: https://mavlink.io/en/messages/common.html#OBSTACLE_DISTANCE
 distances_array_length = 72
 angle_offset = None
 increment_f = None 
 distances = np.ones((distances_array_length,), dtype=np.uint16) * (2000 + 1)
 
 # Obstacle distances in nine segments for the new OBSTACLE_DISTANCE_3D message
-# see here https://github.com/rishabsingh3003/Vision-Obstacle-Avoidance/blob/land_detection_final/Companion_Computer/d4xx_to_mavlink_3D.py
 mavlink_obstacle_coordinates = np.ones((9,3), dtype = float) * (9999)
 dist_debug = np.ones((9), dtype = float)
 debug_enable = 1
@@ -157,18 +146,18 @@ def mavlink_loop(conn, callbacks):
 def send_obstacle_distance_3D_message():
     global mavlink_obstacle_coordinates, min_depth_cm, max_depth_cm
     global last_obstacle_distance_sent_ms
-    global current_time_ms
+    global cur_time_in_ms
     if (enable_3D_msg_obstacle_distance == True):
-        # if current_time_ms == last_obstacle_distance_sent_ms:
+        # if cur_time_in_ms == last_obstacle_distance_sent_ms:
         #     # no new frame
         #     progress("no new frame")
         #     return
-        # last_obstacle_distance_sent_ms = current_time_ms
+        # last_obstacle_distance_sent_ms = cur_time_in_ms
 
         for q in range(9):
             # send 9 sector array
             conn.mav.obstacle_distance_3d_send(
-                current_time_ms,    # ms Timestamp (UNIX time or time since system boot)
+                cur_time_in_ms,    # ms Timestamp (UNIX time or time since system boot)
                 0,
                 mavutil.mavlink.MAV_FRAME_BODY_FRD,
                 65535,
@@ -178,20 +167,13 @@ def send_obstacle_distance_3D_message():
                 float(min_depth_cm / 100),
                 float(max_depth_cm / 100) #needs to be in meters
             )
-        current_time_ms = current_milli_time()
+        cur_time_in_ms = current_milli_time()
 
 def send_msg_to_gcs(text_to_be_sent):
     # MAV_SEVERITY: 0=EMERGENCY 1=ALERT 2=CRITICAL 3=ERROR, 4=WARNING, 5=NOTICE, 6=INFO, 7=DEBUG, 8=ENUM_END
     text_msg = 'ROS2Mav: ' + text_to_be_sent
     conn.mav.statustext_send(mavutil.mavlink.MAV_SEVERITY_INFO, text_msg.encode())
     progress("INFO: %s" % text_to_be_sent)
-
-# Request a timesync update from the flight controller, for future work.
-# TODO: Inspect the usage of timesync_update 
-def update_timesync(ts=0, tc=0):
-    if ts == 0:
-        ts = int(round(time.time() * 1000))
-    conn.mav.timesync_send(tc, ts)
 
 # Listen to ATTITUDE data: https://mavlink.io/en/messages/common.html#ATTITUDE
 def att_msg_callback(value):
@@ -221,7 +203,7 @@ def fltmode_msg_callback(value):
                 send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
             prev_avoid_strategy = curr_avoid_strategy
     elif ((curr_flight_mode[1] == 3) or (curr_flight_mode[1] == 4) or (curr_flight_mode[1] == 6)): # for Auto Guided and RTL modes
-        curr_avoid_strategy = "bendy_avoid"
+        curr_avoid_strategy = "bendyruler"
         if (curr_avoid_strategy != prev_avoid_strategy):
             if (AC_VERSION_41 == True): # only AC 4.1 or higher
                 enable_3D_msg_obstacle_distance = True
@@ -292,16 +274,16 @@ mavlink_callbacks = {
 mavlink_thread = threading.Thread(target=mavlink_loop, args=(conn, mavlink_callbacks))
 mavlink_thread.start()
 
-# Send MAVlink messages in the background at pre-determined frequencies
-sched = BackgroundScheduler()
-sched.add_job(send_obstacle_distance_3D_message, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='3d_obj_dist')
-sched.start()
+# Send MAVlink messages in the background at pre-determined frequencies, delete?
+msg_scheduler = BackgroundScheduler()
+msg_scheduler.add_job(send_obstacle_distance_3D_message, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='3d_obj_dist')
+msg_scheduler.start()
 
 # Begin of the main loop
 last_time = time.time()
 # Store the timestamp for MAVLink messages
-current_time_us = int(round(time.time() * 1000000))
-current_time_ms = current_milli_time()
+cur_time_in_us = int(round(time.time() * 1000000))
+cur_time_in_ms = current_milli_time()
 rospy.spin()
 
 mavlink_thread_should_exit = True

@@ -7,10 +7,12 @@ import pyzed.sl as sl
 
 from tqdm import tqdm
 
-dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
+dummyDrone = False # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
+    print("DUMMY DRONE")
     import DummyGeneralFunctions as gd    
 else:
+    print("REAL DRONE")
     import GeneralDroneFunctions as gd #TODO REANABLE FOR FLIGHT
 
 precLoiter = False
@@ -102,7 +104,7 @@ async def mainFunc():
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
-        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 1.5) # overcast darkish day 2.5 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 2) # overcast darkish day 2.5 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
         cam.set_camera_settings(sl.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
         cam.set_camera_settings(sl.VIDEO_SETTINGS.WHITEBALANCE_TEMPERATURE, -1) #(2800, 6500), -1 is auto
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
@@ -176,6 +178,7 @@ async def mainFunc():
         async def liftOffAndMoveToCenter():
             print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62)
+            await asyncio.sleep(1.5)
             print("Goto body")
             #await gd.GoToGlobal(vehicle, averaged) #coords will probably have to be a different format (averaged variable)
             await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)

@@ -35,21 +35,21 @@ def FrameVelocityControl(vehicle, velX, velY, velZ):
 
 def GimbalMovement(vehicle, pitch, roll, yaw, locationRoi):
     logger.debug(f"Attempted gimbal movement to {pitch} {roll} {yaw} {locationRoi} -- Sleeping 4s")
-    time.sleep(4)
+    time.sleep(1)
 
 def DownloadChallenge(vehicle):
     logger.debug("Attempted command download. Sleeping 5s.")
-    time.sleep(5)
+    time.sleep(1)
 
 def ClearCurrentChallenge(vehicle):
     logger.debug("Attempted t clear challenge. Sleeping 3s.")
-    time.sleep(3)
+    time.sleep(1)
 
 
 """(Unsure about how getting challange file works still) Get challenge file from copter"""
 def GetCurrentChallenge(vehicle, challenge):
     logger.debug("Attempted to get current challenge. sleeping 3s.")
-    time.sleep(3)
+    time.sleep(1)
 
 
 def PrintTelemetry(vehicle):
@@ -87,19 +87,19 @@ def PrintTelemetry(vehicle):
 
 def LandDrone(vehicle):
     logger.debug("Attempted landing. Sleeping 10s")
-    time.sleep(10)
+    time.sleep(1)
 
 async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
     logger.debug(f"Attempted go to target body {north} {east} {down} {stop_speed} -- Sleeping 4s")
-    await asyncio.sleep(2)
+    await asyncio.sleep(1)
 
 async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_distance=1, time_out=20):
     logger.debug(f"Attempted go to global {list(coords)} {stop_speed} {stop_distance} {time_out} -- Sleeping 4s")
-    await asyncio.sleep(2)
+    await asyncio.sleep(1)
 
 def MoveRelative(vehicle, pos):
     logger.debug(f"Attempted move relative {list(pos)} -- Sleeping 4s")
-    time.sleep(2)
+    time.sleep(1)
 
 
 def GetDistanceInMeters(vehicle, aLoc1, aLoc2):
