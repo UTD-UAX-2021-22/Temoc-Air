@@ -203,7 +203,7 @@ async def main():
         vehicle.parameters["OA_DB_EXPIRE"] = 0
         vehicle.parameters["OA_DB_QUEUE_SIZE"] = 40
         vehicle.parameters["OA_BR_LOOKAHEAD"] = 7 # Tune day of comp
-        vehicle.parameters["OA_MARGIN_MAX"] = 3.5
+        vehicle.parameters["OA_MARGIN_MAX"] = 1.5 # This needs to be tuned, most likley has to be set pretty low otherwise it will go side to side constantly 
         vehicle.parameters["OA_TYPE"] = 1
         vehicle.parameters["OA_DB_DIST_MAX"] = 10
         vehicle.parameters["OA_DB_SIZE"] = 200

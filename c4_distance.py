@@ -111,7 +111,7 @@ def distances_from_depth_image(point_cloud_mat, distances, min_depth_m, max_dept
     # Take the mean value over the obstacle line thickness
     for i in range(DISTANCES_ARRAY_LENGTH):
         err, point_cloud_value = point_cloud_mat.get_value((int(i * step)), height)
-        dist_m = math.sqrt(point_cloud_value[0] * point_cloud_value[0] + point_cloud_value[1] * point_cloud_value[1] + point_cloud_value[2] * point_cloud_value[2]) - ERROR_MARGIN
+        dist_m = math.sqrt(point_cloud_value[0] * point_cloud_value[0] + point_cloud_value[1] * point_cloud_value[1] + point_cloud_value[2] * point_cloud_value[2]) - ERROR_MARGIN # ERROR_MARGIN is 0 rn
 
         # A value of max_distance + 1 (cm) means no obstacle is present. 
         # A value of UINT16_MAX (65535) for unknown/not used.
@@ -204,7 +204,7 @@ def depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_
             sector[0] = x_step / 2 + gx
 
             if i < 9:
-                # calculate depth of closest object in sector
+                # Get coordinates of closest object in a sector
                 x, y, z = get_object_depth(depth, sector, i)
                 sector_obstacle_coordinates[i][0] = x
                 sector_obstacle_coordinates[i][1] = y
@@ -217,7 +217,7 @@ def depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_
                 if i < 9:
                     sector[1] = y_step / 2 + gy
         
-                    # calculate depth of closest object in sector
+                    # Get coordinates of closest object in a sector
                     x, y, z = get_object_depth(depth, sector, i)
                     sector_obstacle_coordinates[i][0] = x
                     sector_obstacle_coordinates[i][1] = y
