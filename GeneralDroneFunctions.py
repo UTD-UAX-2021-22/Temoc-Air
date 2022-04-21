@@ -259,6 +259,10 @@ async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_di
         if time.time() - time_start > time_out:
             logging.getLogger(__name__).critical(f"Global Move Exceeded Time Out of {time_out}s ")
 
+async def FollowGlobalPath(vehicle: Vehicle, coords, **kwargs):
+    for c in coords:
+        await GoToGlobal(vehicle, c, **kwargs)
+
 def MoveRelative(vehicle, pos):
     """
         Send command to request the vehicle fly to a specified
