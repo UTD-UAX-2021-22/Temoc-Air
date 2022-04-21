@@ -161,11 +161,13 @@ async def mainFunc():
         
         # print(base_pos + field_corners_y)
         # Calculate real world coords of field corners in UTM system
-        grid_path = Utils.calculateGridSearch(field_dims=(53.333/2, 50), border=2, max_run_space=9)
+        grid_path = Utils.calculateGridSearch(field_dims=(53.333/2, 50), border=2, max_run_space=9, direction=0) - np.array([53.333/4, 0])
         new_pos = base_pos + (Rotation.from_euler('Z', [vehicle.heading], degrees=True).apply(y2m(field_corners_y))[:,0:2])
         grid_path = base_pos + (Rotation.from_euler('Z', [vehicle.heading], degrees=True).apply(y2m(grid_path))[:,0:2])
         logger.debug(f"Calculated base UTM {base_pos} with {zl} {zn} ")
         logger.debug(f"Relative field coordinates {Rotation.from_euler('Z', [-vehicle.heading], degrees=True).apply(y2m(field_corners_y))[:,0:2]}")
+        grid_path_latlong = np.zeros_like(grid_path)
+        grid_path_latlong[0,:], grid_path_latlong[1, :] = utm.to_latlon(grid_path[0,:], grid_path[1,:], zl, zn)
         #Calculate middle coords
         averaged = np.average(new_pos, axis=0) 
         coords_lat = np.zeros((4,2))
@@ -332,7 +334,7 @@ async def mainFunc():
         with MissionContext("Fallback grid search"):
             logger.debug("Failed to locate logo in POI search, falling back to grid search")
             #TODO: Fallback
-            pathFuture = asyncio.create_task(gd.FollowGlobalPath(grid_path))
+            pathFuture = asyncio.create_task(gd.FollowGlobalPath(grid_path_latlong))
             while not logo_found and not pathFuture.done():
                 logger.debug("Visit start")
                 err = cam.grab(status)
