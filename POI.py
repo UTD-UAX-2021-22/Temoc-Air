@@ -53,9 +53,9 @@ def bbox_area(a):
 
 @dataclass
 class Hue_Detector_Opts:
-    target_hue: float = 300 #353 #220#349#330#302
-    hue_range: Tuple[float, float] = (240,340)#(330,360)#(290, 315) (0,360)->usingForBlackmarkers
-    tolerance: float = .1#.009#.006#.1 #.005
+    target_hue: float = 300#300 #353 #220#349#330#302
+    hue_range: Tuple[float, float] = (270,320) #2680,320#240,320#(330,360)#(290, 315) (0,360)->usingForBlackmarkers
+    tolerance: float = .065#.1#.009#.006#.1 #.005
     opening_size: int = 10
     value_range: Tuple[float, float] =  (.5*255,255)#(1,255)#(0.5*255, 255)
     # saturation_range: Tuple[float, float] = (0.1*255, 255)

@@ -14,7 +14,7 @@ if dummyDrone == True:
 else:
     print("REAL DRONE")
     import GeneralDroneFunctions as gd #TODO REANABLE FOR FLIGHT
-
+exposure = 1 # overcast darkish day 2 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
 precLoiter = False
 avgHome = True
 if precLoiter and avgHome:
@@ -104,7 +104,7 @@ async def mainFunc():
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
-        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, 2) # overcast darkish day 2.5 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, exposure) 
         cam.set_camera_settings(sl.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
         cam.set_camera_settings(sl.VIDEO_SETTINGS.WHITEBALANCE_TEMPERATURE, -1) #(2800, 6500), -1 is auto
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)

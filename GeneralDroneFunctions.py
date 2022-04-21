@@ -207,7 +207,7 @@ async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1): #north is 
         0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
 	# send command to vehicle
     vehicle.send_mavlink(msg)
-    await asyncio.sleep(0.25) # Wait to try and avoid reporting move completion prematurely
+    await asyncio.sleep(0.5) # Wait to try and avoid reporting move completion prematurely
     while vehicle.groundspeed <= stop_speed:
         # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
         print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")

@@ -156,8 +156,14 @@ target_altitude = feet_to_meters(25)
 
 #connect to vehicle and get the current
 #vehicle = connect('127.0.0.1:14550', wait_ready=True)
+print("Connecting to Drone")
 vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+print("Connected")
 
+
+
+vehicle.parameters["WPNAV_SPEED"] = 5000 #cm/S
+vehicle.parameters["OA_TYPE"] = 0 #cm/S
 #arm and takeoff the drone
 #head in direction that drone is facing
 #move 30 yards and land
@@ -165,6 +171,7 @@ vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
 arm_and_takeoff(target_altitude)
 home_location = vehicle.location.global_relative_frame
 vehicle.airspeed = 4
+time.sleep(1)
 goto_target_body_ned(target_meters, 0, 0)
 
 while vehicle.mode.name == "GUIDED":
