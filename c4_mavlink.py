@@ -42,9 +42,7 @@ from sensor_msgs.msg import LaserScan, PointCloud
 CONNECTION_DEFAULT_STRING = "/dev/ttyTHS2" #'127.0.0.1:14855'
 
 # Ideal baudrate for Mission Planner
-CONNECTION_DEFAULT_BAUD = 1500000
-
-# vehicle = connect("/dev/ttyTHS2", wait_ready=True, baud=CONNECTION_DEFAULT_BAUD)
+CONNECTION_DEFAULT_BAUD = 115200
 
 # Enable/disable each message/function individually
 enable_3D_msg_obstacle_distance = False
@@ -246,7 +244,7 @@ def sector_data_callback(msg):
     #print("\033c")
     #print(min_depth_cm, max_depth_cm)
     # print (mavlink_obstacle_coordinates)
-    print (dist_debug)
+    # print (dist_debug)
 
 
 ######################################################

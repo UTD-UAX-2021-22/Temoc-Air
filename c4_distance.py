@@ -256,7 +256,7 @@ def depth_sector_test():
     cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.SATURATION, -1)
     cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.SHARPNESS, -1)
     #cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.WHITEBALANCE_TEMPERATURE, 6500)
-    #cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.BRIGHTNESS, 8)
+    cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.BRIGHTNESS, 8)
     #cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.HUE, -1)
 
     # Create and set RuntimeParameters after opening the camera

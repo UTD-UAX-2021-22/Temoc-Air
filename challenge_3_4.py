@@ -197,7 +197,7 @@ async def main():
         vehicle = general_functions.DummyVehicle()
     else:
         #vehicle = connect('127.0.0.1:14550', wait_ready=True, baud=1500000)     
-        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=1500000)
+        vehicle = connect('/dev/ttyTHS2', wait_ready=True, baud=115200)
 
         #OA PArameters
         vehicle.parameters["OA_DB_EXPIRE"] = 0
