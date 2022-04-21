@@ -366,7 +366,9 @@ async def mainFunc():
 
         horizontal_home_done = False
         logo_relative_avg = np.array([0.0,0.0,0.0]).flatten()
+        avg_home_start_time = 0
         logo_relative_avg_num = 0
+        avg_home_timeout = 20
         logo_tracker = None
         while True:
         # async for ftemp in cam_down.subscribe():
@@ -401,7 +403,7 @@ async def mainFunc():
                     fail_count = 0
 
                 logo_found, logo_center, logo_bbox = logoDetector.processFrame(vehicle, img)
-
+                logo_direct_detect = logo_found
                 if logo_tracker is not None:
                     track_ok, bbox = logo_tracker.update(img)
                     if track_ok and not logo_found :
@@ -454,6 +456,9 @@ async def mainFunc():
                 
                     if avgHome and not horizontal_home_done:
                         logo_relative_avg += logo_position_relative.flatten()
+                        if avg_home_start_time == 0:
+                            avg_home_start_time = time.time()
+
                         logo_relative_avg_num += 1
                         logger.debug(f"Averaged logo relative position {logo_relative_avg_num} times")
                         print(f"Averaged logo relative position {logo_relative_avg_num} times")
@@ -463,9 +468,22 @@ async def mainFunc():
                             logger.info(f"Performing Horizontal homing by {0 - logo_relative_avg[0]} {0 - logo_relative_avg[1]}")
                             print(f"Performing Horizontal homing by {0 - logo_relative_avg[0]} {0 -logo_relative_avg[1]}")
                             gd.SetGuided(vehicle)
-                            await gd.GoToTargetBody(vehicle, 0 - logo_relative_avg[1], 0 - logo_relative_avg[0], 0, stop_speed=0.04)
+                            await gd.GoToTargetBody(vehicle, 0 - logo_relative_avg[1], 0 - logo_relative_avg[0], 0, stop_speed=0.04, timeout=6)
                             gd.StartPrecisionLanding(vehicle)
                             horizontal_home_done = True
+                        elif (time.time() - avg_home_start_time) > avg_home_timeout:
+                            print("Average homing timeout. Will retry")
+                            logo_relative_avg = logo_relative_avg / logo_relative_avg_num
+                            logo_relative_avg[2] = 0
+                            logger.info(f"Performing Horizontal homing by {0 - logo_relative_avg[0]} {0 - logo_relative_avg[1]}")
+                            print(f"Performing Horizontal homing by {0 - logo_relative_avg[0]} {0 -logo_relative_avg[1]}")
+                            gd.SetGuided(vehicle)
+                            await gd.GoToTargetBody(vehicle, 0 - logo_relative_avg[1], 0 - logo_relative_avg[0], 0, stop_speed=0.04, timeout=6)
+                            horizontal_home_done = False
+                            avg_home_start_time = 0
+                            logo_relative_avg_num = 0
+                            logo_relative_avg = np.array([0.0,0.0,0.0]).flatten()
+
                     else:
                         gd.UpdateLandingTargetPosition(vehicle, logo_x_angle, logo_y_angle, np.linalg.norm(logo_position_relative))
                 

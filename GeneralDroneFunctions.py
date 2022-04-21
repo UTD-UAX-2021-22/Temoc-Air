@@ -190,7 +190,7 @@ def LandDrone(vehicle):
 	
     print("The copter has landed!")
 
-async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1): #north is Y east is Xs
+async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1, timeout=20): #north is Y east is Xs
     """
         Send command to request the vehicle fly to a specified
         location in the North, East, Down frame of the drone's body. So north is direction that
@@ -208,17 +208,22 @@ async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1): #north is 
 	# send command to vehicle
     vehicle.send_mavlink(msg)
     await asyncio.sleep(0.25) # Wait to try and avoid reporting move completion prematurely
-    while vehicle.groundspeed <= stop_speed:
+    start_time = time.time()
+    while vehicle.groundspeed <= stop_speed and (time.time() - start_time) < timeout:
         # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
         print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
         # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
         await asyncio.sleep(0.25)
 
-    while vehicle.groundspeed > stop_speed:
+    while vehicle.groundspeed > stop_speed and (time.time() - start_time) < timeout:
         # print(f"Vehicle knows it is at {vehicle.location.global_frame}")
         print(f"Vehicle Ground Speed: {vehicle.groundspeed} Vehicle Stop Speed: {stop_speed}")
         # logging.getLogger(__name__).debug(f"Vehicle knows it is at {vehicle.location.global_frame}")
         await asyncio.sleep(0.1)
+
+    if (time.time() - start_time) > timeout:
+        print(f"Vehicle move timeout at {time.time()}")
+        logger.critical(f"Vehicle move timeout at {time.time()}")
 
 async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_distance=1, time_out=20):
     coords = np.asarray(coords).flatten()
