@@ -326,7 +326,22 @@ def depth_sector_test():
                 sector[0] = x_step / 2 + gx
 
                 # calculate depth of closest object in sector
-                if i < 9:
+                x, y, z = get_object_depth(depth, sector, i)
+                sector_obstacle_coordinates[i][0] = x
+                sector_obstacle_coordinates[i][1] = y
+                sector_obstacle_coordinates[i][2] = z
+                distance = math.sqrt(x * x + y * y + z * z)
+                distance = "{:.2f}".format(distance)
+                cv2.putText(image_sector, " " +  (str(distance) + " m"),
+                        ((gx + 10), (gy + y_step - 10)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                gy += y_step
+                i += 1
+
+                while gy < (height * 2):
+                    sector[1] = y_step / 2 + gy
+
+                    # calculate depth of closest object in sector
                     x, y, z = get_object_depth(depth, sector, i)
                     sector_obstacle_coordinates[i][0] = x
                     sector_obstacle_coordinates[i][1] = y
@@ -336,23 +351,6 @@ def depth_sector_test():
                     cv2.putText(image_sector, " " +  (str(distance) + " m"),
                             ((gx + 10), (gy + y_step - 10)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-                gy += y_step
-                i += 1
-
-                while gy < (height * 2):
-                    sector[1] = y_step / 2 + gy
-
-                    # calculate depth of closest object in sector
-                    if i < 9:
-                        x, y, z = get_object_depth(depth, sector, i)
-                        sector_obstacle_coordinates[i][0] = x
-                        sector_obstacle_coordinates[i][1] = y
-                        sector_obstacle_coordinates[i][2] = z
-                        distance = math.sqrt(x * x + y * y + z * z)
-                        distance = "{:.2f}".format(distance)
-                        cv2.putText(image_sector, " " +  (str(distance) + " m"),
-                                ((gx + 10), (gy + y_step - 10)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
                     gy += y_step
                     i += 1
 
@@ -370,8 +368,8 @@ def depth_sector_test():
                 for j in range(9)]
             point_cloud_node.publish(ros_point_cloud)
 
-    cv2.destroyAllWindows()
-    cam.close()     
+        cv2.destroyAllWindows()
+        cam.close()     
     
 """
     Last Edit: 3/31/2022
