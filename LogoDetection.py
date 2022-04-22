@@ -218,7 +218,7 @@ if __name__ == "__main__":
     # detector = LogoDetector()
     # detector.processFrame(template_image)
     frame_number = 0
-
+    logo_tracker = None
     while True:
         success, img = cap.read()
         logo_detected, center, bbox = detector.processFrame(None, img)
@@ -226,10 +226,32 @@ if __name__ == "__main__":
         if logo_detected:
             cv2.putText(img, f"Logo Found: {logo_detected}", text_org,font, 1, (0, 255, 0), 2, cv2.LINE_AA)
             cv2.circle(img, np.asarray(center).astype(np.int32).flatten(), 15, (255, 255, 0), 4)
+            tracked_bbox = None
+            # if logo_tracker is None:
+            #     logo_tracker = cv2.legacy.TrackerMedianFlow_create()
+            #     logo_tracker.init(img, bbox)
+            # else:
+            #     track_ok, tracked_bbox = logo_tracker.update(img)
 
+            # logo_tracker = cv2.legacy.TrackerMedianFlow_create()
+            logo_tracker = cv2.legacy.TrackerMedianFlow_create()
+            logo_tracker.init(img, bbox)
+            tracked_bbox = None
+            # track_ok, tracked_bbox = logo_tracker.update(img)
+
+            if tracked_bbox is not None and track_ok:
+                # print(tracked_bbox)
+                cv2.rectangle(img, (int(tracked_bbox[0]), int(tracked_bbox[1])), (int(tracked_bbox[0]+ tracked_bbox[2]), int(tracked_bbox[1] + tracked_bbox[3])), (255, 255, 0), 4)
+                cv2.circle(img, (int(tracked_bbox[0]+ tracked_bbox[2]/2), int(tracked_bbox[1] + tracked_bbox[3]/2)), 15, (0, 0, 255), 4)
             
             cv2.rectangle(img, (int(bbox[0]), int(bbox[1])), (int(bbox[0]+ bbox[2]), int(bbox[1] + bbox[3])), (255, 0, 0), 4)
+        elif logo_tracker is not None:
+            track_ok, tracked_bbox = logo_tracker.update(img)
 
+            if tracked_bbox is not None and track_ok:
+                # print(tracked_bbox)
+                cv2.rectangle(img, (int(tracked_bbox[0]), int(tracked_bbox[1])), (int(tracked_bbox[0]+ tracked_bbox[2]), int(tracked_bbox[1] + tracked_bbox[3])), (255, 255, 0), 4)
+                cv2.circle(img, (int(tracked_bbox[0]+ tracked_bbox[2]/2), int(tracked_bbox[1] + tracked_bbox[3]/2)), 15, (0, 0, 255), 4)
 
         # logo_detected, det_dict, detType, num_found = detectLogo(img, marker_ids, board)
         # if logo_detected:
@@ -254,6 +276,7 @@ if __name__ == "__main__":
         k = cv2.waitKey(1) & 0xff
         # logger.debug(f"Frame {frame_number} took {(time.perf_counter() -  frame_start)*1000}")
         frame_number += 1
-
+        if k == 'r':
+            logo_tracker = None
         if k == 27:
             break
