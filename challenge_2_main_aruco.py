@@ -222,70 +222,101 @@ async def mainFunc():
     # runtime = cam.RuntimeParameters()
     # #imageSize = cam.get_camera_information().camera_resolution
     # zedImage = cam.Mat(round(cam.get_camera_information().camera_resolution.width, 2), cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
+    # with MissionContext("POI Search"):
     with MissionContext("POI Search"):
-        # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
-        fail_count = 0
-        rotate_time = 26
-        spin_started = False
-         # Command the vehicle to rotate 360 degrees over 12 seconds
-        rot_start_time = 0
-        sim_multiplier = 1
-        print("Await liftoff task")
-        while not (lft_off_task.done()):
-            print("Await liftoff task")
-            await asyncio.sleep(1)
-        print("Liftoff task Done")
-        while True:
-            err = cam.grab(status)
-            telem_logger.writeValues(frame_count=frame_count)
-            frame_count += 1
-            if err == sl.ERROR_CODE.SUCCESS:
-        # async for ftemp in cf:
-                ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize) # Get frame from front camera
-                #frame_status, img = (True, bridge.imgmsg_to_cv2(rospy.wait_for_message('/iris_demo/camera/image_raw',Image), desired_encoding="bgr8")) # Acquire image from front camera
-                #frame_status, img = (True, bridge.compressed_imgmsg_to_cv2(ftemp, desired_encoding="bgr8")) # Convert front camera frame to OpenCV image
-                frame_status = True
-                img = zedImage.get_data()
-                mtime = time.time() - mission_start_time
-                #print(img.shape)
-                # If vehicle has finished moving to the center of the field, begin survey spin
-                #print("If statement to spin")
-                if lft_off_task.done() and not spin_started:
-                    print("Spin")
-                    gd.SetConditionYaw(vehicle, 360, relative = True, speed = 15)#speed = 360//rotate_time) Commented part makes speed 24 deg/sec
-                    rot_start_time = time.time()
-                    spin_started = True
-                elif lft_off_task.done() and spin_started and (time.time() - rot_start_time) > (sim_multiplier*rotate_time+1):
-                    break
-                if not frame_status:
-                    fail_count += 1
-                    logger.critical(f"Failed to acquire frame from forward camera. Failed {fail_count} times")
-                    continue
-                else:
-                    fail_count = 0
-
-                pos = vehicle.location.global_relative_frame
-                attttt = vehicle.attitude
-                Utils.dumpDebugData("v_att", yaw=attttt.yaw, pitch=attttt.pitch , roll=attttt.roll, heading=vehicle.heading, mission_time=mtime)
-                pois_seen, centroids, bboxes = poiTracker.processFrame(vehicle, img)
-                telem_logger.writeValues(centroid_np=centroids, centroid_bboxes=bboxes)
-                if dummyDrone == True:
-                    cv2.imshow('Downward Camera', img)
-                    cv2.waitKey(1)
-                for row, ridx in zip(centroids, range(centroids.shape[0])):
-                     #print("commented utils")
-                     Utils.dumpDebugData("centroids", x=row[0], y=row[1], index=ridx, mission_time=mtime)
-                     telem_logger.writeValues(centroid=dict(x=row[0], y=row[1], index=ridx))
-                if pois_seen:
-                    world_coords = pixCoordToWorldPosition(vehicle, fcam_info, centroids, mission_time=mtime)
-                    geoTracker.reportPoi(world_coords, mission_time=mtime)
-                # else: 
-                #     print("No POI's Seen")
-                
-                # if (time.time() - rot_start_time) > (2*rotate_time+1):
-                #     break
+            current_move_index = 0
+            if not dummyDrone:
+                vehicle.simple_goto(LocationGlobalRelative(lat=grid_path_latlong[current_move_index, 0], lon=grid_path_latlong[current_move_index, 1], alt=7.62))
             else:
-                print("Camera Failed line 202")
+                logger.debug(f"Dummy move to {grid_path_latlong[current_move_index, :]}")
+            current_move_start_time = time.time()
+            logger.debug("Failed to locate logo in POI search, falling back to grid search")
+            print("Failed to locate logo in POI search, falling back to grid search")
+ 
+            while not logo_found:
+                err = cam.grab(status)
+                print("Fallback")
+                if (not gd.IsMoving(vehicle) and gd.IsCloseEnough(vehicle, grid_path_latlong[current_move_index, :])) or (time.time() - current_move_start_time> 20):
+                    current_move_index += 1
+                    if current_move_index < np.shape(grid_path_latlong)[0]:
+                        if not dummyDrone:
+                            vehicle.simple_goto(LocationGlobalRelative(lat=grid_path_latlong[current_move_index, 0], lon=grid_path_latlong[current_move_index, 1], alt=7.62))
+                        else:
+                            logger.debug(f"Dummy move to {grid_path_latlong[current_move_index, :]}")
+                        print(f"Moving to index {current_move_index}")
+                        current_move_start_time = time.time();
+                    
+                if err == sl.ERROR_CODE.SUCCESS:
+                    ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
+                    frame_status = True
+                    img = zedImage.get_data()
+                    logo_found, *_ = logoDetector.processFrame(vehicle, img)
+                else:
+                    print("Error with ZED")
+                    print(err)
+        # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
+        # fail_count = 0
+        # rotate_time = 26
+        # spin_started = False
+        #  # Command the vehicle to rotate 360 degrees over 12 seconds
+        # rot_start_time = 0
+        # sim_multiplier = 1
+        # print("Await liftoff task")
+        # while not (lft_off_task.done()):
+        #     print("Await liftoff task")
+        #     await asyncio.sleep(1)
+        # print("Liftoff task Done")
+        # while True:
+        #     err = cam.grab(status)
+        #     telem_logger.writeValues(frame_count=frame_count)
+        #     frame_count += 1
+        #     if err == sl.ERROR_CODE.SUCCESS:
+        # # async for ftemp in cf:
+        #         ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT, sl.MEM.CPU, imageSize) # Get frame from front camera
+        #         #frame_status, img = (True, bridge.imgmsg_to_cv2(rospy.wait_for_message('/iris_demo/camera/image_raw',Image), desired_encoding="bgr8")) # Acquire image from front camera
+        #         #frame_status, img = (True, bridge.compressed_imgmsg_to_cv2(ftemp, desired_encoding="bgr8")) # Convert front camera frame to OpenCV image
+        #         frame_status = True
+        #         img = zedImage.get_data()
+        #         mtime = time.time() - mission_start_time
+        #         #print(img.shape)
+        #         # If vehicle has finished moving to the center of the field, begin survey spin
+        #         #print("If statement to spin")
+        #         if lft_off_task.done() and not spin_started:
+        #             print("Spin")
+        #             gd.SetConditionYaw(vehicle, 360, relative = True, speed = 15)#speed = 360//rotate_time) Commented part makes speed 24 deg/sec
+        #             rot_start_time = time.time()
+        #             spin_started = True
+        #         elif lft_off_task.done() and spin_started and (time.time() - rot_start_time) > (sim_multiplier*rotate_time+1):
+        #             break
+        #         if not frame_status:
+        #             fail_count += 1
+        #             logger.critical(f"Failed to acquire frame from forward camera. Failed {fail_count} times")
+        #             continue
+        #         else:
+        #             fail_count = 0
+
+        #         pos = vehicle.location.global_relative_frame
+        #         attttt = vehicle.attitude
+        #         Utils.dumpDebugData("v_att", yaw=attttt.yaw, pitch=attttt.pitch , roll=attttt.roll, heading=vehicle.heading, mission_time=mtime)
+        #         pois_seen, centroids, bboxes = poiTracker.processFrame(vehicle, img)
+        #         telem_logger.writeValues(centroid_np=centroids, centroid_bboxes=bboxes)
+        #         if dummyDrone == True:
+        #             cv2.imshow('Downward Camera', img)
+        #             cv2.waitKey(1)
+        #         for row, ridx in zip(centroids, range(centroids.shape[0])):
+        #              #print("commented utils")
+        #              Utils.dumpDebugData("centroids", x=row[0], y=row[1], index=ridx, mission_time=mtime)
+        #              telem_logger.writeValues(centroid=dict(x=row[0], y=row[1], index=ridx))
+        #         if pois_seen:
+        #             world_coords = pixCoordToWorldPosition(vehicle, fcam_info, centroids, mission_time=mtime)
+        #             geoTracker.reportPoi(world_coords, mission_time=mtime)
+        #         # else: 
+        #         #     print("No POI's Seen")
+                
+        #         # if (time.time() - rot_start_time) > (2*rotate_time+1):
+        #         #     break
+        #     else:
+        #         print("Camera Failed line 202")
         #cam_front.close()
     #PilImage.fromarray(geoTracker.getGrayscaleMap(), 'L').save("poi_heatmap.png")
     
@@ -336,38 +367,38 @@ async def mainFunc():
                 break
 
     # zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C1)
-    if not logo_found and gridFallback:
-        with MissionContext("Fallback grid search"):
-            current_move_index = 0
-            if not dummyDrone:
-                vehicle.simple_goto(LocationGlobalRelative(lat=grid_path_latlong[current_move_index, 0], lon=grid_path_latlong[current_move_index, 1], alt=7.62))
-            else:
-                logger.debug(f"Dummy move to {grid_path_latlong[current_move_index, :]}")
-            current_move_start_time = time.time()
-            logger.debug("Failed to locate logo in POI search, falling back to grid search")
-            print("Failed to locate logo in POI search, falling back to grid search")
+    # if not logo_found and gridFallback:
+        # with MissionContext("Fallback grid search"):
+        #     current_move_index = 0
+        #     if not dummyDrone:
+        #         vehicle.simple_goto(LocationGlobalRelative(lat=grid_path_latlong[current_move_index, 0], lon=grid_path_latlong[current_move_index, 1], alt=7.62))
+        #     else:
+        #         logger.debug(f"Dummy move to {grid_path_latlong[current_move_index, :]}")
+        #     current_move_start_time = time.time()
+        #     logger.debug("Failed to locate logo in POI search, falling back to grid search")
+        #     print("Failed to locate logo in POI search, falling back to grid search")
  
-            while not logo_found:
-                err = cam.grab(status)
-                print("Fallback")
-                if (not gd.IsMoving(vehicle) and gd.IsCloseEnough(vehicle, grid_path_latlong[current_move_index, :])) or (time.time() - current_move_start_time> 20):
-                    current_move_index += 1
-                    if current_move_index < np.shape(grid_path_latlong)[0]:
-                        if not dummyDrone:
-                            vehicle.simple_goto(LocationGlobalRelative(lat=grid_path_latlong[current_move_index, 0], lon=grid_path_latlong[current_move_index, 1], alt=7.62))
-                        else:
-                            logger.debug(f"Dummy move to {grid_path_latlong[current_move_index, :]}")
-                        print(f"Moving to index {current_move_index}")
-                        current_move_start_time = time.time();
+        #     while not logo_found:
+        #         err = cam.grab(status)
+        #         print("Fallback")
+        #         if (not gd.IsMoving(vehicle) and gd.IsCloseEnough(vehicle, grid_path_latlong[current_move_index, :])) or (time.time() - current_move_start_time> 20):
+        #             current_move_index += 1
+        #             if current_move_index < np.shape(grid_path_latlong)[0]:
+        #                 if not dummyDrone:
+        #                     vehicle.simple_goto(LocationGlobalRelative(lat=grid_path_latlong[current_move_index, 0], lon=grid_path_latlong[current_move_index, 1], alt=7.62))
+        #                 else:
+        #                     logger.debug(f"Dummy move to {grid_path_latlong[current_move_index, :]}")
+        #                 print(f"Moving to index {current_move_index}")
+        #                 current_move_start_time = time.time();
                     
-                if err == sl.ERROR_CODE.SUCCESS:
-                    ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
-                    frame_status = True
-                    img = zedImage.get_data()
-                    logo_found, *_ = logoDetector.processFrame(vehicle, img)
-                else:
-                    print("Error with ZED")
-                    print(err)
+        #         if err == sl.ERROR_CODE.SUCCESS:
+        #             ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
+        #             frame_status = True
+        #             img = zedImage.get_data()
+        #             logo_found, *_ = logoDetector.processFrame(vehicle, img)
+        #         else:
+        #             print("Error with ZED")
+        #             print(err)
     
     
     # At this point, the logo has been found and is within the FOV of the downward camera
