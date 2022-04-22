@@ -173,9 +173,11 @@ def createBoardFromTemplateImage(img, markerSize = 4, totalMarkers=250):
     bboxs, ids, rejected = findArucoMarkers(img)
     key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
     markerDict = aruco.Dictionary_get(key)
-    
+
     bn = np.array(bboxs)
     bn = bn.squeeze()
+    bn = np.array([bn])
+    logging.getLogger().debug(f"Detected 2 bboxs from template. IDS: ({ids})   ({bn.shape}): {bn}")
     bn = np.pad(bn, ((0,0), (0,0), (0, 1)), 'constant', constant_values=(123, 0))
     logging.getLogger().debug(f"Detected bboxs from template. IDS: ({ids})   ({bn.shape}): {bn}")
     return cv2.aruco.Board_create(bn, markerDict, ids)

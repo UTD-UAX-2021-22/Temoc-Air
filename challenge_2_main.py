@@ -7,7 +7,7 @@ import pyzed.sl as sl
 
 from tqdm import tqdm
 
-dummyDrone = False # Set to True to bench test and not connect to real drone, False for actual flights
+dummyDrone = True # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     print("DUMMY DRONE")
     import DummyGeneralFunctions as gd
@@ -515,7 +515,7 @@ async def mainFunc():
 
                     # if logo_tracker is None:
                     logger.debug(f"Re-Initialized logo tracker with {logo_bbox}")
-                    logo_tracker = ()
+                    logo_tracker = logo_tracker_create_func()
                     logo_tracker.init(img, logo_bbox)
 
 
