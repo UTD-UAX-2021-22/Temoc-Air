@@ -4,10 +4,10 @@ import pyzed.sl as stereolabs
 import math
 import numpy as np
 import logging
-# import rospy
-#from sensor_msgs.msg import LaserScan, PointCloud, ChannelFloat32
-#from geometry_msgs.msg import Point32, PoseStamped
-#from nav_msgs.msg import Odometry
+import rospy
+from sensor_msgs.msg import LaserScan, PointCloud, ChannelFloat32
+from geometry_msgs.msg import Point32, PoseStamped
+from nav_msgs.msg import Odometry
 
 # Global constants
 FRONT_AVOID_DISTANCE = 2.5 # In meters, if any object is within this distance in front of the copter from the center of the copter then the copter needs to start making adjustments
@@ -236,7 +236,7 @@ def depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_
         # Send point_cloud data to ROS node
         ros_point_cloud.points = [
             Point32(x = sector_obstacle_coordinates[j][0],y = sector_obstacle_coordinates[j][1],z = sector_obstacle_coordinates[j][2])
-            for j in range(1, 9, 3)]
+            for j in range(1, 7, 3)]
         point_cloud_node.publish(ros_point_cloud)
 
 def depth_sector_test():
@@ -374,7 +374,7 @@ def depth_sector_test():
             # Send point_cloud data to ROS node
             ros_point_cloud.points = [
                 Point32(x=sector_obstacle_coordinates[j][0],y=sector_obstacle_coordinates[j][1],z=sector_obstacle_coordinates[j][2])
-                for j in range(1, 9, 3)]
+                for j in range(1, 7, 3)]
             point_cloud_node.publish(ros_point_cloud)
 
     cv2.destroyAllWindows()
