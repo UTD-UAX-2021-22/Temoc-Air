@@ -278,6 +278,10 @@ def pose_callback(msg):
     
     # Get roll, pitch, and yaw from rotation matrix from quaternion
     roll, pitch, yaw = transformations.euler_from_matrix(rotation_mat)
+
+    rospy.loginfo(f"Received Pose in %s : X: {pose_x} Y: {pose_y} Z: {pose_z} - R: {roll} P: {pitch} Y: {yaw}")
+
+    mavros_node.publish(msg)
     
 
 ######################################################
@@ -300,6 +304,7 @@ rospy.loginfo('listener node started')
 rospy.Subscriber('/Tobor/distance_array', LaserScan, data_callback_from_zed)
 rospy.Subscriber('/Tobor/9sectorarray', PointCloud, sector_data_callback)
 rospy.Subscriber('/zed2/zed_node/pose', PoseStamped, pose_callback)
+mavros_node = rospy.Publisher('/mavros/vision_pose/pose', PoseStamped, queue_size = 10)
 rospy.Subscriber('/zed2/zed_node/odom', Odometry, visual_odemetry_callback)
 send_msg_to_gcs('ROS node connected')
 sleep(1) # wait until the ROS node has booted

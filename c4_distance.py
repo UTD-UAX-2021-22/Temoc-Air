@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.9
+ #!/usr/bin/env python3.9
 
 import pyzed.sl as stereolabs
 import math
@@ -145,8 +145,8 @@ def initialize_ros():
     rospy.loginfo('distance node started')
     laser_scan_node = rospy.Publisher('/Tobor/distance_array', LaserScan, queue_size = 10)
     point_cloud_node = rospy.Publisher('/Tobor/9sectorarray', PointCloud, queue_size = 12) # queue_size was 10 before
-    odometry_node = rospy.Publisher('/zed2/zed_node/odom', Odometry, queue_size = 10)
-    pose_node = rospy.Publisher('/zed2/zed_node/pose', PoseStamped, queue_size = 10)
+    #odometry_node = rospy.Publisher('/zed2/zed_node/odom', Odometry, queue_size = 10)
+    #pose_node = rospy.Publisher('/zed2/zed_node/pose', PoseStamped, queue_size = 10)
     
     #Initialize laserscan node
     scan = LaserScan()
@@ -168,7 +168,7 @@ def initialize_ros():
     ros_point_cloud.header.frame_id ='zed_9_sector_scan'
     ros_point_cloud.channels = [channel]
     
-    return scan, laser_scan_node, point_cloud_node, ros_point_cloud, odometry_node, pose_node
+    return scan, laser_scan_node, point_cloud_node, ros_point_cloud#, odometry_node, pose_node
 
 """
     Last Edit: 4/19/2022
@@ -252,7 +252,7 @@ def depth_sector_test():
     init_params.camera_resolution = stereolabs.RESOLUTION.HD720 # Resolution set to 720p could go up to 1080p
     #err = cam.open(init_params)
 
-    print(f"{cam.is_opened()}")
+    #print(f"{cam.is_opened()}")
     #if err != stereolabs.ERROR_CODE.SUCCESS:
         #print(repr(err))
         #cam.close()
@@ -264,10 +264,10 @@ def depth_sector_test():
     tracking_parameters.enable_area_memory = True
     tracking_parameters.enable_pose_smoothing = True
     #err = cam.enable_positional_tracking(tracking_parameters)
-    #if err != stereolabs.ERROR_CODE.SUCCESS:
-        #print("Pos Tracking Error")
-        #cam.close()
-        #exit()
+    if err != stereolabs.ERROR_CODE.SUCCESS:
+        print("Pos Tracking Error")
+        cam.close()
+        exit()
 
     cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.EXPOSURE, -1) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
     cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values
@@ -287,22 +287,14 @@ def depth_sector_test():
     runtime_parameters.confidence_threshold = 100
     runtime_parameters.textureness_confidence_threshold = 100
 
-    print("Starting ROS")
-    scan, laser_scan_node, point_cloud_node, ros_point_cloud, odometry_node, pose_node = initialize_ros()
 
-    cam_pose = stereolabs.Pose()
-    pose_node.publish(cam_pose)
-    odometry_node.publish(cam_pose)
+
+    print("Starting ROS")
+    scan, laser_scan_node, point_cloud_node, ros_point_cloud = initialize_ros()
     
     # Initialze the matrix's for analysis
     sector_mat = stereolabs.Mat()
     point_cloud_mat = stereolabs.Mat()
-    
-    res_params = stereolabs.Resolution()
-    width = round(cam.get_camera_information().camera_resolution.width / 2)
-    height = round(cam.get_camera_information().camera_resolution.height / 2)
-    res_params.width = width
-    res_params.height = height
 
     while True:
         # A new image is available if grab() returns SUCCESS
