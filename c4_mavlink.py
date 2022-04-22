@@ -20,6 +20,7 @@
         rosrun challenge4 c4_distance.py
 '''
 
+from statistics import covariance
 import sys
 import os
 os.environ["MAVLINK20"] = "2"
@@ -37,6 +38,9 @@ from time import sleep
 from apscheduler.schedulers.background import BackgroundScheduler
 from pymavlink import mavutil
 from sensor_msgs.msg import LaserScan, PointCloud
+from tf.transformations import transformations
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
 
 # Connection string for the FCU
 CONNECTION_DEFAULT_STRING = "/dev/ttyTHS2" #'127.0.0.1:14855'
@@ -46,6 +50,7 @@ CONNECTION_DEFAULT_BAUD = 115200
 
 # Enable/disable each message/function individually
 enable_3D_msg_obstacle_distance = False
+enable_vision_position_estimate = False
 obstacle_distance_msg_hz_default = 15.0 # This needs to be tuned
 curr_avoid_strategy = "bendyruler"
 prev_avoid_strategy = ""
@@ -128,12 +133,12 @@ else:
 ###  MAVLink Functions ###
 
 def mavlink_loop(conn, callbacks):
-    '''a main routine for a thread; reads data from a mavlink connection,
-    calling callbacks based on message type received.
+    '''
+        A main routine for a thread; reads data from a mavlink connection,
+        calling callbacks based on message type received.
     '''
     interesting_messages = list(callbacks.keys())
     while not mavlink_thread_should_exit:
-        # send a heartbeat msg
         conn.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
                                 mavutil.mavlink.MAV_AUTOPILOT_GENERIC,
                                 0,
@@ -156,8 +161,8 @@ def send_obstacle_distance_3D_message():
         #     return
         # last_obstacle_distance_sent_ms = cur_time_in_ms
 
-        for q in range(9):
-            # send 9 sector array
+        for q in range(1, 7, 3):
+            # send 9 sector array but only the 3 middle sectors
             conn.mav.obstacle_distance_3d_send(
                 cur_time_in_ms,    # ms Timestamp (UNIX time or time since system boot)
                 0,
@@ -170,6 +175,25 @@ def send_obstacle_distance_3D_message():
                 float(max_depth_cm / 100) #needs to be in meters
             )
         cur_time_in_ms = current_milli_time()
+        
+def send_vision_position_estimate():
+    global translated_x, translated_y, translated_z
+    global roll, pitch, yaw
+    global covariance
+    global reset_counter
+    if (enable_vision_position_estimate == True):
+        conn.mav.vision_position_estimate(
+            cur_time_in_us,
+            translated_x, # local x position
+            translated_y, # local y position
+            translated_z, # local z position
+            roll, # roll angle
+            pitch, # pitch angle
+            yaw, # yaw angle
+            covariance, # Row-major representation of pose 6x6 cross-covariance matrix upper right triangle
+            reset_counter, # Estimate reset counter. This should be incremented when the estimate resets in any of the dimensions (position, velocity, attitude, angular speed)
+        )
+    cur_time_in_us = int(round(time.time() * 1000000))
 
 def send_msg_to_gcs(text_to_be_sent):
     # MAV_SEVERITY: 0=EMERGENCY 1=ALERT 2=CRITICAL 3=ERROR, 4=WARNING, 5=NOTICE, 6=INFO, 7=DEBUG, 8=ENUM_END
@@ -188,9 +212,8 @@ def att_msg_callback(value):
 def fltmode_msg_callback(value):
     global curr_avoid_strategy
     global prev_avoid_strategy
-    global enable_3D_msg_obstacle_distance
+    global enable_3D_msg_obstacle_distance, enable_vision_position_estimate
     global distances, AC_VERSION_41
-    dist_arr = [0] * 72
     curr_flight_mode = (value.base_mode, value.custom_mode)
     #print(f"Value : {value}")
     #print(f"Flight Mode: {curr_flight_mode}")
@@ -201,6 +224,7 @@ def fltmode_msg_callback(value):
             if (curr_avoid_strategy != prev_avoid_strategy):
                 if ((AC_VERSION_41 == True) and (curr_flight_mode[1] == 5)): # only AC 4.1 or higher and LOITER
                     enable_3D_msg_obstacle_distance = True
+                    enable_vision_position_estimate = True
                     print(enable_3D_msg_obstacle_distance)
                     send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
                 prev_avoid_strategy = curr_avoid_strategy
@@ -209,6 +233,7 @@ def fltmode_msg_callback(value):
             if (curr_avoid_strategy != prev_avoid_strategy):
                 if (AC_VERSION_41 == True): # only AC 4.1 or higher
                     enable_3D_msg_obstacle_distance = True
+                    enable_vision_position_estimate = True
                     print(enable_3D_msg_obstacle_distance)
                     send_msg_to_gcs('Sending 3D obstacle distance messages to FCU')
                 prev_avoid_strategy = curr_avoid_strategy
@@ -216,6 +241,7 @@ def fltmode_msg_callback(value):
             curr_avoid_strategy = "none"
             if (curr_avoid_strategy != prev_avoid_strategy):
                 enable_3D_msg_obstacle_distance = False
+                enable_vision_position_estimate = False
                 send_msg_to_gcs('No valid flt mode for obstacle avoidance')
                 prev_avoid_strategy = curr_avoid_strategy
 
@@ -226,10 +252,6 @@ def data_callback_from_zed(msg):
     min_depth_cm = int(msg.range_min * 100)
     max_depth_cm = int(msg.range_max * 100)
     increment_f = msg.angle_increment
-    # there appears to be a defect in the obstacle_distance function in Arducopter 4.0.x
-    # so we need to set the offset manually and cant take the correct calculated increment
-    if (AC_VERSION_41 == False):
-        increment_f = 1.6
     angle_offset = msg.angle_min
 
 def sector_data_callback(msg):
@@ -241,11 +263,38 @@ def sector_data_callback(msg):
         mavlink_obstacle_coordinates[j][1] = (msg.points[j].x)
         mavlink_obstacle_coordinates[j][2] = (-1 * msg.points[j].y)
         # dist_debug[j] = m.sqrt(mavlink_obstacle_coordinates[j][0] * mavlink_obstacle_coordinates[j][0] + mavlink_obstacle_coordinates[j][1] * mavlink_obstacle_coordinates[j][1] + mavlink_obstacle_coordinates[j][2] * mavlink_obstacle_coordinates[j][2]) - 0.45
-    #print("\033c")
-    #print(min_depth_cm, max_depth_cm)
+    # print("\033c")
+    # print(min_depth_cm, max_depth_cm)
     # print (mavlink_obstacle_coordinates)
     # print (dist_debug)
+    
+def visual_odemetry_callback(msg):
+    global odomoetry_x, odomoetry_y, odomoetry_z
+    global roll, pitch, yaw
+    
+    # Camera position in map frame
+    odomoetry_x = msg.pose.pose.x
+    odomoetry_y = msg.pose.pose.y
+    odomoetry_z = msg.pose.pose.z
 
+    # Returns rotation matrix from quaternion
+    rotation_mat = transformations.quaternion_matrix(msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
+    
+    # Get roll, pitch, and yaw from rotation matrix
+    roll, pitch, yaw = transformations.euler_from_matrix(rotation_mat)
+    
+def pose_callback(msg):
+    global pose_x, pose_y, pose_z
+    global roll, pitch, yaw
+    
+    # Camera position in map frame
+    pose_x = msg.pose.position.x
+    pose_y = msg.pose.position.y
+    pose_z = msg.pose.position.z
+    
+    # Get roll, pitch, and yaw from rotation matrix from quaternion
+    roll, pitch, yaw = transformations.euler_from_matrix(transformations.quaternion_matrix(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w))
+    
 
 ######################################################
 ##  Main code starts here                           ##
@@ -266,6 +315,8 @@ rospy.init_node('listener')
 rospy.loginfo('listener node started')
 rospy.Subscriber('/Tobor/distance_array', LaserScan, data_callback_from_zed)
 rospy.Subscriber('/Tobor/9sectorarray', PointCloud, sector_data_callback)
+rospy.Subscriber('/zed2/zed_node/pose', PoseStamped, pose_callback)
+rospy.Subscriber('', Odometry, visual_odemetry_callback)
 send_msg_to_gcs('ROS node connected')
 sleep(1) # wait until the ROS node has booted
 # register the callbacks
@@ -279,6 +330,7 @@ mavlink_thread.start()
 # Send MAVlink messages in the background at pre-determined frequencies, delete?
 msg_scheduler = BackgroundScheduler()
 msg_scheduler.add_job(send_obstacle_distance_3D_message, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='3d_obj_dist')
+msg_scheduler.add_job(send_vision_position_estimate, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='vis_pos_est')
 msg_scheduler.start()
 
 # Begin of the main loop

@@ -4,10 +4,10 @@ import time
 # import math
 # from pymavlink import mavutil
 # import argparse  # Allows to input vals from command line to use them in python
-# import numpy as np
+import numpy as np
 # import threading
 # import sys
-# import asyncio
+import asyncio
 from ctypes import *
 
 # Bench Testing
@@ -33,7 +33,7 @@ def transform_pose(pose, tx) :
   transform_.set_identity()
   
   # Translate the tracking frame by tx along the X axis
-  transform_[0][3] = tx
+  transform_[0, 3] = tx
   
   # Pose(new reference frame) = M.inverse() * pose (camera frame) * M, where M is the transform between the two frames
   transform_inv = stereolabs.Transform()
@@ -66,7 +66,7 @@ async def challenge_3(vehicle, target_meters, target_altitude, field_width):
     print("Rising...")
     await general_functions.TakeOffDrone(vehicle, target_altitude)
     
-    print("Goto 50 Yard")
+    print(f"Flying {target_meters} Yards")
     await general_functions.GoToTargetBody(vehicle, target_meters, 0, 0)
 
     while vehicle.mode.name == "GUIDED":
@@ -101,32 +101,27 @@ async def challenge_3(vehicle, target_meters, target_altitude, field_width):
 
         time.sleep(1)
 
-async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width, cam_width, cam_height):
+async def challenge_4(cam, runtime_parameters, vehicle, target_meters, target_altitude, field_width, cam_width, cam_height):
     print("Start Challenge 4")
-    print("Setting ZED Parameters")
     
-    # Enable positional tracking with default parameters
-    tracking_parameters = stereolabs.PositionalTrackingParameters()
-    err = cam.enable_positional_tracking(tracking_parameters)
+    # Initialize ROS & MAVLink
+    print("Initializing ROS")
+    scan, laser_scan_node, point_cloud_node, pointcloud, odometry_node, pose_node = depth_analysis.initialize_ros()
+    
+    # translation_left_to_center = cam.get_camera_information().calibration_parameters.T[0]
 
-    # Set sensing mode in FILL
-    runtime_parameters = stereolabs.RuntimeParameters()
-    runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.FILL
-
-    translation_left_to_center = cam.get_camera_information().calibration_parameters.T[0]
-
+    # Get the pose of the ZED and send it over to ArduPilot through a MAVROS publisher
     cam_pose = stereolabs.Pose()
+    pose_node.publish(cam_pose)
+    
+    # Get the visual odomoetry from the ZED and send it over to ArduPilot through a MAVROS pubisher
+    odometry_node.publish(cam_pose)
+    
+    # Get the pose of the camera relative to the camera (or world) frame
+    # tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.CAMERA)
+    # transform_pose(cam_pose.pose_data(stereolabs.Transform()), translation_left_to_center)
 
-    # Retrieve and transform the pose data into a new frame located at the center of the camera
-    tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.WORLD)
-    transform_pose(cam_pose.pose_data(stereolabs.Transform()), translation_left_to_center)
-
-    py_translation = stereolabs.Translation()
-    tx = round(cam_pose.get_translation(py_translation).get()[0], 3)
-    ty = round(cam_pose.get_translation(py_translation).get()[1], 3)
-    tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
-
-    home_location = Location(tx, ty, tz)
+    home_location = vehicle.location.global_relative_frame #Location(tx, ty, tz)
     half_field = (field_width / 2) - home_location.lat
     
     sector_mat = stereolabs.Mat()
@@ -134,29 +129,25 @@ async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width,
 
     distance_traveled = 0
     currentLocation = home_location
-    
-    # Initialize ROS & MAVLink
-    print("Initializing ROS")
-    scan, laser_scan_node, point_cloud_node, pointcloud = depth_analysis.intialize_ros()
 
     print("Rising...")
     await general_functions.TakeOffDrone(vehicle, target_altitude)
     
-    print(f"Goto {target_meters} Yard")
+    print(f"Flying {target_meters} Yards")
     await general_functions.GoToTargetBody(vehicle, target_meters, 0, 0)
 
     while vehicle.mode.name == "GUIDED_NOGPS":
         
-        tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.WORLD)
-        transform_pose(tracking_state.pose_data(stereolabs.Transform()), translation_left_to_center)
-        tx = round(cam_pose.get_translation(py_translation).get()[0], 3)
-        ty = round(cam_pose.get_translation(py_translation).get()[1], 3)
-        tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
+        # transform_pose(tracking_state.pose_data(stereolabs.Transform()), translation_left_to_center)
+        # tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.CAMERA)
+        # tx = round(cam_pose.get_translation(py_translation).get()[0], 3)
+        # ty = round(cam_pose.get_translation(py_translation).get()[1], 3)
+        # tz = round(cam_pose.get_translation(py_translation).get()[2], 3)
         
         # Start depth analysis here?
         depth_analysis.depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_cloud_node, pointcloud, runtime_parameters, cam_width, cam_height)
 
-        currentLocation.set(tx, ty, tz)
+        currentLocation = vehicle.location.global_relative_frame #.set(tx, ty, tz)
         distance_traveled = general_functions.GetDistanceInMeters(vehicle, currentLocation, home_location)
         print("Distance traveled: ", distance_traveled)
 
@@ -166,9 +157,10 @@ async def challenge_4(cam, vehicle, target_meters, target_altitude, field_width,
             
             reachedElevation = False
             while reachedElevation == False:  # While the target elevation has not been reached
-                tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.WORLD)
-                transform_pose(cam_pose.pose_data(stereolabs.Transform()), translation_left_to_center)
-                currDroneHeight = round(cam_pose.get_translation(py_translation).get()[2], 3)
+                # tracking_state = cam.get_position(cam_pose, stereolabs.REFERENCE_FRAME.WORLD)
+                # transform_pose(cam_pose.pose_data(stereolabs.Transform()), translation_left_to_center)
+                currentAltLocation = vehicle.location.global_relative_frame
+                currDroneHeight = currentAltLocation.alt # round(cam_pose.get_translation(py_translation).get()[2], 3)
                 print("Current drone elevation: ", currDroneHeight)
 
                 if currDroneHeight >= (.95 * target_altitude):  # If the drone is at the target elevation (account for timing)
@@ -216,12 +208,17 @@ async def main():
     
     # Start the correct challenge
     if CURRENT_CHALLENGE == 3:
-        vehicle.parameters["PRX_TYPE"] = 8
-        vehicle.parameters["PRX_ORIENT"] = 0
+        if dummyDrone == False:
+            vehicle.parameters["PRX_TYPE"] = 8
+            vehicle.parameters["PRX_ORIENT"] = 0
+            
         await challenge_3(vehicle, target_meters, target_altitude, field_width)
+        
+        print("Challenge 3 Complete")
     elif CURRENT_CHALLENGE == 4:
-        vehicle.parameters["PRX_TYPE"] = 2
-        vehicle.parameters["PRX_ORIENT"] = 1
+        if dummyDrone == False:
+            vehicle.parameters["PRX_TYPE"] = 2
+            vehicle.parameters["PRX_ORIENT"] = 1
         print("Intializing & Opening ZED Camera...")
         
         #ZED SDK Parameters
@@ -240,7 +237,7 @@ async def main():
             if status != stereolabs.ERROR_CODE.SUCCESS:
                 print(repr(status))
                 cam.close()
-                exit()
+                exit(1)
         else:
             print("ZED Camera is Already Open")
         
@@ -257,13 +254,30 @@ async def main():
         height = round(cam.get_camera_information().camera_resolution.height / 2)
         res_params.width = width
         res_params.height = height
-    
         print("ZED Camera Opened & Intialized")
         
-        await challenge_4(cam, vehicle, target_meters, target_altitude, field_width, runtime_parameters, width, height)
+        print("Enable ZED Pos Tracking")
+        # Enable positional tracking with default parameters
+        tracking_parameters = stereolabs.PositionalTrackingParameters()
+        tracking_parameters.enable_area_memory = True
+        tracking_parameters.enable_pose_smoothing = True
+        err = cam.enable_positional_tracking(tracking_parameters)
+        if err != stereolabs.ERROR_CODE.SUCCESS:
+            print(repr(status))
+            cam.close()
+            exit()
+
+        print("Setting ZED Parameters")
+        # Set sensing mode in FILL
+        runtime_parameters = stereolabs.RuntimeParameters()
+        runtime_parameters.sensing_mode = stereolabs.SENSING_MODE.FILL
+    
+        await challenge_4(cam, runtime_parameters, vehicle, target_meters, target_altitude, field_width, runtime_parameters, width, height)
         
         cam.disable_positional_tracking()
         cam.close()
+        
+        print("Challenge 4 Complete")
     
     general_functions.LandDrone(vehicle)
     vehicle.close() #stop copter from running
