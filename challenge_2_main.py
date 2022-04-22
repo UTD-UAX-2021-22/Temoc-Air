@@ -14,8 +14,8 @@ if dummyDrone == True:
 else:
     print("REAL DRONE")
     import GeneralDroneFunctions as gd #TODO REANABLE FOR FLIGHT
-exposure = 2 # overcast darkish day 2 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
-camera_gain = 100
+exposure = -1 #2 # overcast darkish day 2 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+camera_gain = -1 #5 #5 #10 #50
 precLoiter = False
 avgHome = True
 gridFallback = True
@@ -198,7 +198,7 @@ async def mainFunc():
             print("Finished Liftoff and Move to Center")
             
         lft_off_task = asyncio.create_task(liftOffAndMoveToCenter())
-        await asyncio.sleep(8)
+        await asyncio.sleep(8) #FLIGHT
 
     # print(f"Coords lat: {coords_lat}")
     visitCorners = False
@@ -224,6 +224,8 @@ async def mainFunc():
     # runtime = cam.RuntimeParameters()
     # #imageSize = cam.get_camera_information().camera_resolution
     # zedImage = cam.Mat(round(cam.get_camera_information().camera_resolution.width, 2), cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C4)
+    skipPoi = True
+
     with MissionContext("POI Search"):
         # await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0) # Move forward to the middle of the field
         fail_count = 0
@@ -292,50 +294,51 @@ async def mainFunc():
     #PilImage.fromarray(geoTracker.getGrayscaleMap(), 'L').save("poi_heatmap.png")
     
     logo_found = False
-    with MissionContext("POI Visit"):
-        start_x, start_y, *_ = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
-        path = Utils.calculateVisitPath(geoTracker.getPOIs(), np.array([start_x, start_y]))
-        logger.debug("Cam start")
-        #NEED SERVO MOVEMENT HERE
-        gd.ServoMovement(vehicle, 90+dcam_angle)
-        err = cam.grab(status)
-        telem_logger.writeValues(frame_count=frame_count)
-        frame_count += 1
-        if err != sl.ERROR_CODE.SUCCESS:
-            print(repr(err))
-            exit(1)
-        # runtime = sl.RuntimeParameters()
-        # imageSize = sl.get_camera_information().camera_resolution
-        zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C1)
-        # zedImage = sl.Mat(imageSize.width, imageSize.height, sl.MAT_TYPE.U8_C4) 
-        #cam_down.subscribe()
-        logger.debug("Visit start")
-        for target_to_investigate in tqdm(path, desc="Investigating POIs"):
-            lat, lon = utm.to_latlon(target_to_investigate[0], target_to_investigate[1], zl, zn)
-            logger.debug(f"Visting xy {target_to_investigate[0]}, {target_to_investigate[1]} at lat lon {lat}, {lon}")
-            await gd.GoToGlobal(vehicle, [lat, lon] )
-            logger.debug(f"Arrived")
-            #await cd.__anext__()
-            logger.debug("Starting downward scan")
-            for i in tqdm(range(30), desc="Looking for logo", leave=False):
-                err = cam.grab(status)
-                telem_logger.writeValues(frame_count=frame_count)
-                frame_count += 1
-                if err == sl.ERROR_CODE.SUCCESS:
-                    ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
-                    #frame_status, img = (True, bridge.compressed_imgmsg_to_cv2(ftemp, desired_encoding="bgr8"))
-                    frame_status = True
-                    img = zedImage.get_data()
-                    logo_found, *_ = logoDetector.processFrame(vehicle, img)
-                    if dummyDrone == True:
-                        cv2.imshow('Downward Camera', img)
-                        cv2.waitKey(1)
-                    if logo_found:
-                        #print("Logo Found")
-                        break
-            
-            if logo_found:
-                break
+    if not skipPoi:
+        with MissionContext("POI Visit"):
+            start_x, start_y, *_ = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
+            path = Utils.calculateVisitPath(geoTracker.getPOIs(), np.array([start_x, start_y]))
+            logger.debug("Cam start")
+            #NEED SERVO MOVEMENT HERE
+            gd.ServoMovement(vehicle, 90+dcam_angle)
+            err = cam.grab(status)
+            telem_logger.writeValues(frame_count=frame_count)
+            frame_count += 1
+            if err != sl.ERROR_CODE.SUCCESS:
+                print(repr(err))
+                exit(1)
+            # runtime = sl.RuntimeParameters()
+            # imageSize = sl.get_camera_information().camera_resolution
+            zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C1)
+            # zedImage = sl.Mat(imageSize.width, imageSize.height, sl.MAT_TYPE.U8_C4) 
+            #cam_down.subscribe()
+            logger.debug("Visit start")
+            for target_to_investigate in tqdm(path, desc="Investigating POIs"):
+                lat, lon = utm.to_latlon(target_to_investigate[0], target_to_investigate[1], zl, zn)
+                logger.debug(f"Visting xy {target_to_investigate[0]}, {target_to_investigate[1]} at lat lon {lat}, {lon}")
+                await gd.GoToGlobal(vehicle, [lat, lon] )
+                logger.debug(f"Arrived")
+                #await cd.__anext__()
+                logger.debug("Starting downward scan")
+                for i in tqdm(range(30), desc="Looking for logo", leave=False):
+                    err = cam.grab(status)
+                    telem_logger.writeValues(frame_count=frame_count)
+                    frame_count += 1
+                    if err == sl.ERROR_CODE.SUCCESS:
+                        ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
+                        #frame_status, img = (True, bridge.compressed_imgmsg_to_cv2(ftemp, desired_encoding="bgr8"))
+                        frame_status = True
+                        img = zedImage.get_data()
+                        logo_found, *_ = logoDetector.processFrame(vehicle, img)
+                        if dummyDrone == True:
+                            cv2.imshow('Downward Camera', img)
+                            cv2.waitKey(1)
+                        if logo_found:
+                            #print("Logo Found")
+                            break
+                
+                if logo_found:
+                    break
 
     # zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C1)
     if not logo_found and gridFallback:
@@ -523,10 +526,10 @@ async def mainFunc():
                             print("Average homing timeout. Will retry")
                             logo_relative_avg = logo_relative_avg / logo_relative_avg_num
                             logo_relative_avg[2] = 0
-                            logger.info(f"Performing Horizontal homing by {logo_relative_avg[0]} {logo_relative_avg[1]}")
-                            print(f"Performing Horizontal homing by {logo_relative_avg[0]} {logo_relative_avg[1]}")
+                            logger.info(f"Performing Horizontal homing by {0-logo_relative_avg[0]} {0-logo_relative_avg[1]}")
+                            print(f"Performing Horizontal homing by {0-logo_relative_avg[0]} {0-logo_relative_avg[1]}")
                             gd.SetGuided(vehicle)
-                            await gd.GoToTargetBody(vehicle, logo_relative_avg[1], logo_relative_avg[0], 0, stop_speed=0.04, timeout=6)
+                            await gd.GoToTargetBody(vehicle, 0-logo_relative_avg[1], 0-logo_relative_avg[0], 0, stop_speed=0.04, timeout=6)
                             horizontal_home_done = False
                             avg_home_start_time = 0
                             logo_relative_avg_num = 0

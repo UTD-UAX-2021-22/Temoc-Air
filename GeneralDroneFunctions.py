@@ -401,11 +401,12 @@ def SetROI(loc):
     vehicle.send_mavlink(msg)
 	
 def ServoMovement(vehicle, position):
-    
+    servo_min = 775
+    servo_max = 1775
     if(position <= 0):
-        pwm = 825
+        pwm = servo_min
     elif (position >= 90):
-        pwm = 1825
+        pwm = servo_max
     # elif(22 <= position  <= 25):
     #     pwm = 1300
     # elif(position == 35):
@@ -413,8 +414,9 @@ def ServoMovement(vehicle, position):
     # else:
     #     pwm = 1512
     else:   
-        calcPwm = float(11.111111 * position)
-        newPwm = int(calcPwm) + 825
+        #range / 90
+        calcPwm = float(((servo_max-servo_min)/90) * position)
+        newPwm = int(calcPwm) + servo_min
         pwm = newPwm
 
     msg = vehicle.message_factory.command_long_encode(
