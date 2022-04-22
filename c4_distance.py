@@ -146,7 +146,7 @@ def initialize_ros():
     laser_scan_node = rospy.Publisher('/Tobor/distance_array', LaserScan, queue_size = 10)
     point_cloud_node = rospy.Publisher('/Tobor/9sectorarray', PointCloud, queue_size = 12) # queue_size was 10 before
     odometry_node = rospy.Publisher('/zed2/zed_node/odom', Odometry, queue_size = 10)
-    pose_node = rospy.Publisher('/zed2/zed_node/pose', PoseStamped, queue_Size = 10)
+    pose_node = rospy.Publisher('/zed2/zed_node/pose', PoseStamped, queue_size = 10)
     
     #Initialize laserscan node
     scan = LaserScan()
@@ -236,25 +236,38 @@ def depth_sector(cam, sector_mat, point_cloud_mat, scan, laser_scan_node, point_
         # Send point_cloud data to ROS node
         ros_point_cloud.points = [
             Point32(x = sector_obstacle_coordinates[j][0],y = sector_obstacle_coordinates[j][1],z = sector_obstacle_coordinates[j][2])
-            for j in range(1, 7, 3)]
+            for j in range(1, 9, 3)]
         point_cloud_node.publish(ros_point_cloud)
 
 def depth_sector_test():
     import cv2
+
+    # Open/start the camera and check for initialization errors
+    cam = stereolabs.Camera()
 
     # Create a InitParameters object and set configuration parameters
     init_params = stereolabs.InitParameters()
     init_params.depth_mode = stereolabs.DEPTH_MODE.PERFORMANCE # Use PERFORMANCE or QUALITY depth mode
     init_params.coordinate_units = stereolabs.UNIT.METER  # Use meter units (for depth measurements)
     init_params.camera_resolution = stereolabs.RESOLUTION.HD720 # Resolution set to 720p could go up to 1080p
+    #err = cam.open(init_params)
 
-    # Open/start the camera and check for initialization errors
-    cam = stereolabs.Camera()
-    err = cam.open(init_params)
-    if err != stereolabs.ERROR_CODE.SUCCESS:
-        print(repr(err))
-        cam.close()
-        exit(1)
+    print(f"{cam.is_opened()}")
+    #if err != stereolabs.ERROR_CODE.SUCCESS:
+        #print(repr(err))
+        #cam.close()
+        #exit(1)
+
+    print("Enable ZED Pos Tracking")
+    # Enable positional tracking with default parameters
+    tracking_parameters = stereolabs.PositionalTrackingParameters()
+    tracking_parameters.enable_area_memory = True
+    tracking_parameters.enable_pose_smoothing = True
+    #err = cam.enable_positional_tracking(tracking_parameters)
+    #if err != stereolabs.ERROR_CODE.SUCCESS:
+        #print("Pos Tracking Error")
+        #cam.close()
+        #exit()
 
     cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.EXPOSURE, -1) # very bright day .1-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
     cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values
@@ -264,6 +277,7 @@ def depth_sector_test():
     cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.BRIGHTNESS, -1)
     #cam.set_camera_settings(stereolabs.VIDEO_SETTINGS.HUE, -1)
 
+    print("Setup runtime")
     # Create and set RuntimeParameters after opening the camera
     runtime_parameters = stereolabs.RuntimeParameters()
     #Ian changed sensing mode from FILL to STANDARD on 4/20 (haha)
@@ -272,6 +286,13 @@ def depth_sector_test():
     # Setting the depth confidence parameters
     runtime_parameters.confidence_threshold = 100
     runtime_parameters.textureness_confidence_threshold = 100
+
+    print("Starting ROS")
+    scan, laser_scan_node, point_cloud_node, ros_point_cloud, odometry_node, pose_node = initialize_ros()
+
+    cam_pose = stereolabs.Pose()
+    pose_node.publish(cam_pose)
+    odometry_node.publish(cam_pose)
     
     # Initialze the matrix's for analysis
     sector_mat = stereolabs.Mat()
@@ -282,9 +303,6 @@ def depth_sector_test():
     height = round(cam.get_camera_information().camera_resolution.height / 2)
     res_params.width = width
     res_params.height = height
-    
-    print("Starting ROS")
-    #scan, laser_scan_node, point_cloud_node, ros_point_cloud = initialize_ros()
 
     while True:
         # A new image is available if grab() returns SUCCESS
@@ -374,7 +392,7 @@ def depth_sector_test():
             # Send point_cloud data to ROS node
             ros_point_cloud.points = [
                 Point32(x=sector_obstacle_coordinates[j][0],y=sector_obstacle_coordinates[j][1],z=sector_obstacle_coordinates[j][2])
-                for j in range(1, 7, 3)]
+                for j in range(1, 9, 3)]
             point_cloud_node.publish(ros_point_cloud)
 
     cv2.destroyAllWindows()

@@ -1,26 +1,27 @@
 #!/usr/bin/env python3.9
-
 '''
     Cmd Line Order (Can most likely put implement this as a function that auto runs commands)
     Terminal #1:
         source devel/setup.bash
         rosrun mavros mavsyst mode -c 5 (might not need to do this if the flight mode change works as intended)
         roscore
-        
+
     Terminal #2:
+	roslaunch zed_wrapper zed2.launch
+        
+    Terminal #3:
         source devel/setup.bash (only need to do this once after can run bottom cmd multiple times)
         rosrun challenge4 c4_mavlink.py
         
-    Terminal #3:
+    Terminal #4:
         source devel/setup.bash
         roslaunch mavros apm.launch fcu_url:="/dev/ttyTHS2:1500000"
         
-    Terminal #4:
+    Terminal #:
         source devel/setup.bash (only need to do this once after can run bottom cmd multiple times)
         rosrun challenge4 c4_distance.py
 '''
 
-from statistics import covariance
 import sys
 import os
 os.environ["MAVLINK20"] = "2"
@@ -38,7 +39,7 @@ from time import sleep
 from apscheduler.schedulers.background import BackgroundScheduler
 from pymavlink import mavutil
 from sensor_msgs.msg import LaserScan, PointCloud
-from tf.transformations import transformations
+from transformations import transformations
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 
@@ -175,25 +176,6 @@ def send_obstacle_distance_3D_message():
                 float(max_depth_cm / 100) #needs to be in meters
             )
         cur_time_in_ms = current_milli_time()
-        
-def send_vision_position_estimate():
-    global translated_x, translated_y, translated_z
-    global roll, pitch, yaw
-    global covariance
-    global reset_counter
-    if (enable_vision_position_estimate == True):
-        conn.mav.vision_position_estimate(
-            cur_time_in_us,
-            translated_x, # local x position
-            translated_y, # local y position
-            translated_z, # local z position
-            roll, # roll angle
-            pitch, # pitch angle
-            yaw, # yaw angle
-            covariance, # Row-major representation of pose 6x6 cross-covariance matrix upper right triangle
-            reset_counter, # Estimate reset counter. This should be incremented when the estimate resets in any of the dimensions (position, velocity, attitude, angular speed)
-        )
-    cur_time_in_us = int(round(time.time() * 1000000))
 
 def send_msg_to_gcs(text_to_be_sent):
     # MAV_SEVERITY: 0=EMERGENCY 1=ALERT 2=CRITICAL 3=ERROR, 4=WARNING, 5=NOTICE, 6=INFO, 7=DEBUG, 8=ENUM_END
@@ -273,12 +255,12 @@ def visual_odemetry_callback(msg):
     global roll, pitch, yaw
     
     # Camera position in map frame
-    odomoetry_x = msg.pose.pose.x
-    odomoetry_y = msg.pose.pose.y
-    odomoetry_z = msg.pose.pose.z
+    odomoetry_x = msg.pose.pose.position.x
+    odomoetry_y = msg.pose.pose.position.y
+    odomoetry_z = msg.pose.pose.position.z
 
     # Returns rotation matrix from quaternion
-    rotation_mat = transformations.quaternion_matrix(msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
+    rotation_mat = transformations.quaternion_matrix(np.array([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w]))
     
     # Get roll, pitch, and yaw from rotation matrix
     roll, pitch, yaw = transformations.euler_from_matrix(rotation_mat)
@@ -291,9 +273,11 @@ def pose_callback(msg):
     pose_x = msg.pose.position.x
     pose_y = msg.pose.position.y
     pose_z = msg.pose.position.z
+
+    rotation_mat = transformations.quaternion_matrix(np.array([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]))
     
     # Get roll, pitch, and yaw from rotation matrix from quaternion
-    roll, pitch, yaw = transformations.euler_from_matrix(transformations.quaternion_matrix(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w))
+    roll, pitch, yaw = transformations.euler_from_matrix(rotation_mat)
     
 
 ######################################################
@@ -330,7 +314,7 @@ mavlink_thread.start()
 # Send MAVlink messages in the background at pre-determined frequencies, delete?
 msg_scheduler = BackgroundScheduler()
 msg_scheduler.add_job(send_obstacle_distance_3D_message, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='3d_obj_dist')
-msg_scheduler.add_job(send_vision_position_estimate, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='vis_pos_est')
+#msg_scheduler.add_job(send_vision_position_estimate, 'interval', seconds = 1 / obstacle_distance_msg_hz, id='vis_pos_est')
 msg_scheduler.start()
 
 # Begin of the main loop
