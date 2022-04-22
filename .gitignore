@@ -138,3 +138,4 @@ pd_data/*
 logs/*
 .gitignore
 __init__.py
+.challenge_3_4.py.swo
