@@ -63,7 +63,7 @@ def detectLogo(img, logo_markers, board, markerSize = 4, totalMarkers=50, draw=T
     key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
     arucoDict = aruco.Dictionary_get(key)
     arucoParam = aruco.DetectorParameters_create()
-    arucoParam.adaptiveThreshWinSizeMax = 13
+    # arucoParam.adaptiveThreshWinSizeMax = 13
     bboxs, ids_found, rejected = aruco.detectMarkers(img, arucoDict, parameters = arucoParam)
     bboxs, ids_found, rejected, recovered_idx = aruco.refineDetectedMarkers(img, board, bboxs, ids_found, rejected)
     if draw:
