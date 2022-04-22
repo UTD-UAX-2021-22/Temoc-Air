@@ -15,6 +15,7 @@ else:
     print("REAL DRONE")
     import GeneralDroneFunctions as gd #TODO REANABLE FOR FLIGHT
 exposure = 2 # overcast darkish day 2 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+camera_gain = 100
 precLoiter = False
 avgHome = True
 gridFallback = True
@@ -105,7 +106,8 @@ async def mainFunc():
         init.camera_fps=30
         init.depth_mode = sl.DEPTH_MODE.NONE
         status = cam.open(init)
-        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, exposure) 
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, exposure)
+        cam.set_camera_settings(sl.VIDEO_SETTINGS.GAIN, camera_gain)
         cam.set_camera_settings(sl.VIDEO_SETTINGS.CONTRAST, -1) #-1 is auto (0,8) possible values 
         cam.set_camera_settings(sl.VIDEO_SETTINGS.WHITEBALANCE_TEMPERATURE, -1) #(2800, 6500), -1 is auto
         recording_param = sl.RecordingParameters(f'{time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())}.svo', sl.SVO_COMPRESSION_MODE.H265)
@@ -365,6 +367,9 @@ async def mainFunc():
                     frame_status = True
                     img = zedImage.get_data()
                     logo_found, *_ = logoDetector.processFrame(vehicle, img)
+                    if dummyDrone == True:
+                        cv2.imshow('POI Search', img)
+                        cv2.waitKey(1)
                 else:
                     print("Error with ZED")
                     print(err)
@@ -397,15 +402,17 @@ async def mainFunc():
         logo_relative_avg_num = 0
         avg_home_timeout = 20
         logo_tracker = None
+        logo_interpolated = False
         while True:
         # async for ftemp in cam_down.subscribe():
             frame_acq_start = time.time()
+            logo_interpolated = False
             # Position at start of the frame
             frame_acq_pos = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
             #frame_status, img = (True, bridge.imgmsg_to_cv2(rospy.wait_for_message('/iris_demo/camera/image_raw',Image), desired_encoding="bgr8")) # Acquire image from front camera
             err = cam.grab(status)
             telem_logger.writeValues(frame_count=frame_count)
-            frame_count += 1   
+            frame_count += 1
             if err == sl.ERROR_CODE.SUCCESS:
                 ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
                 frame_status = True
@@ -429,20 +436,28 @@ async def mainFunc():
                 else:
                     fail_count = 0
 
+                
                 logo_found, logo_center, logo_bbox = logoDetector.processFrame(vehicle, img)
+                if logo_found:
+                    print('Logo Found directly')
+                    logger.debug('logo found directly')
+                
+                
                 logo_direct_detect = logo_found
-                if logo_tracker is not None:
-                    track_ok, bbox = logo_tracker.update(img)
-                    if track_ok and not logo_found :
-                        logo_center = (bbox[0]+bbox[2]/2, bbox[1]+bbox[3]/2)
-                        logo_found = True
-                        logger.debug("Logo not found, position interpolated")
-                        print("Logo not found, position interpolated")
-                    elif not logo_found:
-                        logger.critical("Logo not found, FAILED position interpolated")
-                        print("Logo not found, FAILED position interpolated")
-                    else:
-                        logger.critical("Logo tracker updated failure")
+                if logo_tracker is not None and not logo_found:
+                    track_ok, logo_bbox = logo_tracker.update(img)
+                    logo_interpolated = True
+                    # if track_ok and not logo_found :
+                    logo_center = (logo_bbox[0]+logo_bbox[2]/2, logo_bbox[1]+logo_bbox[3]/2)
+                    logo_found = True
+                    logger.debug("Logo not found, position interpolated")
+                    print("Logo not found, position interpolated")
+
+                    # not logo_found:
+                    #     logger.critical("Logo not found, FAILED position interpolated")
+                    #     print("Logo not found, FAILED position interpolated")
+                    # else:
+                    #     logger.critical("Logo tracker updated failure")
                     
                 if logo_found:
                     # from dronekit import VehicleMode
@@ -462,10 +477,10 @@ async def mainFunc():
                         print(err)
                         logger.debug(err)
 
-                    if logo_tracker is None:
-                        logger.debug(f"Initialized logo tracker with {logo_bbox}")
-                        logo_tracker = cv2.legacy.TrackerMedianFlow_create()
-                        logo_tracker.init(img, logo_bbox)
+                    # if logo_tracker is None:
+                    logger.debug(f"Re-Initialized logo tracker with {logo_bbox}")
+                    logo_tracker = cv2.legacy.TrackerMedianFlow_create()
+                    logo_tracker.init(img, logo_bbox)
 
 
                     if not avgHome and not precLoiter: #Original guidance approach
@@ -487,7 +502,7 @@ async def mainFunc():
 
                         
                 
-                    if avgHome and not horizontal_home_done:
+                    if avgHome and not horizontal_home_done and not logo_interpolated:
                         logo_relative_avg += logo_position_relative.flatten()
                         if avg_home_start_time == 0:
                             avg_home_start_time = time.time()
@@ -524,6 +539,13 @@ async def mainFunc():
                     # gd.SetConditionYaw(vehicle, 0, relative=False)
                 if dummyDrone == True:
                     cv2.imshow('Downward Camera', img)
+                    if logo_interpolated:
+                        cv2.rectangle(img, (int(logo_bbox[0]), int(logo_bbox[1])), (int(logo_bbox[0]+ logo_bbox[2]), int(logo_bbox[1] + logo_bbox[3])), (255, 255, 0), 4)
+                        cv2.circle(img, (int(logo_bbox[0]+ logo_bbox[2]/2), int(logo_bbox[1] + logo_bbox[3]/2)), 15, (255, 255, 0), 4)
+                    else:
+                        cv2.rectangle(img, (int(logo_bbox[0]), int(logo_bbox[1])), (int(logo_bbox[0]+ logo_bbox[2]), int(logo_bbox[1] + logo_bbox[3])), (0, 0, 255), 4)
+                        cv2.circle(img, (int(logo_bbox[0]+ logo_bbox[2]/2), int(logo_bbox[1] + logo_bbox[3]/2)), 15, (0, 0, 255), 4)
+
                     cv2.waitKey(1)
         cam.disable_recording()
         cam.close()
@@ -542,7 +564,7 @@ async def mainFunc():
                 #TODO: Set vehicle waypoints to visit path
         else:
             img_down = cam_down.read()
-            logo_found, stat, bbox = detectLogo(img_down, logo_markers)
+            logo_found, stat, logo_bbox = detectLogo(img_down, logo_markers)
 
             if logo_found:
                 gd.LandDrone()
