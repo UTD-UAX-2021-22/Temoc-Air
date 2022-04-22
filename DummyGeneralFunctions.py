@@ -89,13 +89,13 @@ def LandDrone(vehicle):
     logger.debug("Attempted landing. Sleeping 10s")
     time.sleep(1)
 
-async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1):
-    logger.debug(f"Attempted go to target body {north} {east} {down} {stop_speed} -- Sleeping 4s")
+async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1, timeout=10):
+    logger.debug(f"Attempted go to target body {north} {east} {down} {stop_speed} {timeout} -- Sleeping 4s")
     await asyncio.sleep(1)
 
 async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_distance=1, time_out=20):
     logger.debug(f"Attempted go to global {list(coords)} {stop_speed} {stop_distance} {time_out} -- Sleeping 4s")
-    await asyncio.sleep(1)
+    await asyncio.sleep(4)
 
 def MoveRelative(vehicle, pos):
     logger.debug(f"Attempted move relative {list(pos)} -- Sleeping 4s")
@@ -147,7 +147,14 @@ def SetGuided(vehicle):
 
 async def FollowGlobalPath(vehicle: Vehicle, coords, **kwargs):
     logger.debug(f"(sleeping 10s) Attempted follow path {coords} with kwargs {kwargs}")
-    await asyncio.sleep(10)
+    for c in coords:
+        await GoToGlobal(vehicle, c)
+        
+def IsMoving(vehicle):
+    return False
+    
+def IsCloseEnough(vehicle, target, distance=1):
+    return True
 
 
 """

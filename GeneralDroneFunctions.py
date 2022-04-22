@@ -227,6 +227,8 @@ async def GoToTargetBody(vehicle, north, east, down, stop_speed=0.1, timeout=20)
 
 async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_distance=1, time_out=20):
     coords = np.asarray(coords).flatten()
+    logger.debug(f"Going to {coords}")
+    print("Going to global coords {coords}")
     # msg = vehicle.message_factory.set_position_target_global_int_encode(
     #     0,  # time_boot_ms (not used)
     #     0, 0,  # target system, target component
@@ -265,6 +267,7 @@ async def GoToGlobal(vehicle: Vehicle, coords, alt=7.62, stop_speed=0.1, stop_di
             logging.getLogger(__name__).critical(f"Global Move Exceeded Time Out of {time_out}s ")
 
 async def FollowGlobalPath(vehicle: Vehicle, coords, **kwargs):
+    logger.debug("Starting path follow")
     for c in coords:
         await GoToGlobal(vehicle, c, **kwargs)
 
@@ -287,6 +290,13 @@ def MoveRelative(vehicle, pos):
 	# send command to vehicle
     vehicle.send_mavlink(msg)
 
+def IsMoving(vehicle, speed=0.1):
+    return vehicle.groundspeed < speed
+    
+def IsCloseEnough(vehicle, target, distance=1):
+    cx, cy, *_ =  utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
+    tx, ty, *_ = utm.from_latlon(target[0], target[1])
+    return math.sqrt((tx-cx)**2 + (ty-cy)**2) <= distance
 
 def GetDistanceInMeters(vehicle, aLoc1, aLoc2):
     """ Returns the ground distance in metres between two LocationGlobal objects.

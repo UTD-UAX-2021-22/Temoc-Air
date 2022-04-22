@@ -10,14 +10,14 @@ from tqdm import tqdm
 dummyDrone = False # Set to True to bench test and not connect to real drone, False for actual flights
 if dummyDrone == True:
     print("DUMMY DRONE")
-    import DummyGeneralFunctions as gd    
+    import DummyGeneralFunctions as gd
 else:
     print("REAL DRONE")
     import GeneralDroneFunctions as gd #TODO REANABLE FOR FLIGHT
-exposure = 1 # overcast darkish day 2 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
+exposure = 2 # overcast darkish day 2 2.2-3.5 # cloudy 1 # very bright day .01-.5 # (0, 100) % of camera frame rate. -1 sets it to auto
 precLoiter = False
 avgHome = True
-gridFallback = False
+gridFallback = True
 if precLoiter and avgHome:
     sys.exit("Precision Loiter and Average Relative Position homing cannot both be enabled")
 
@@ -36,7 +36,7 @@ import numpy as np
 import utm
 from scipy.spatial.transform import Rotation
 from PIL import Image as PilImage
-from dronekit import connect
+from dronekit import connect, LocationGlobalRelative
 logo_markers = list(range(5))
 print("Imports 100%")
 
@@ -162,13 +162,19 @@ async def mainFunc():
         # print(base_pos + field_corners_y)
         # Calculate real world coords of field corners in UTM system
         grid_path = Utils.calculateGridSearch(field_dims=(53.333/2, 50), border=2, max_run_space=9, direction=0) - np.array([53.333/4, 0])
+        print(f"Grid path before pad {grid_path}")
+        grid_path = np.pad(grid_path, ((0,0),(0,1)), 'constant', constant_values=(0,0))
+        print(f"Grid path after pad {grid_path}")
         new_pos = base_pos + (Rotation.from_euler('Z', [vehicle.heading], degrees=True).apply(y2m(field_corners_y))[:,0:2])
         grid_path = base_pos + (Rotation.from_euler('Z', [vehicle.heading], degrees=True).apply(y2m(grid_path))[:,0:2])
+        print(f"New grid path {grid_path}")
         logger.debug(f"Calculated base UTM {base_pos} with {zl} {zn} ")
         logger.debug(f"Relative field coordinates {Rotation.from_euler('Z', [-vehicle.heading], degrees=True).apply(y2m(field_corners_y))[:,0:2]}")
         grid_path_latlong = np.zeros_like(grid_path)
-        grid_path_latlong[0,:], grid_path_latlong[1, :] = utm.to_latlon(grid_path[0,:], grid_path[1,:], zl, zn)
+        grid_path_latlong[:,0], grid_path_latlong[:,1] = utm.to_latlon(grid_path[:,0], grid_path[:,1], zl, zn)
         #Calculate middle coords
+        print(f"Grid path lat long {grid_path_latlong}")
+        logger.debug(f"grid path lat long {grid_path_latlong}")
         averaged = np.average(new_pos, axis=0) 
         coords_lat = np.zeros((4,2))
         geoTracker = GeoTracker(corners=new_pos)
@@ -183,7 +189,7 @@ async def mainFunc():
         async def liftOffAndMoveToCenter():
             print("Takeoff")
             await gd.TakeOffDrone(vehicle, 7.62)
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(2)
             print("Goto body")
             #await gd.GoToGlobal(vehicle, averaged) #coords will probably have to be a different format (averaged variable)
             await gd.GoToTargetBody(vehicle, gd.FeetToMeters(75), 0, 0)
@@ -329,20 +335,39 @@ async def mainFunc():
             if logo_found:
                 break
 
-    zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C1)
+    # zedImage = sl.Mat(cam.get_camera_information().camera_resolution.width, cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.U8_C1)
     if not logo_found and gridFallback:
         with MissionContext("Fallback grid search"):
+            current_move_index = 0
+            if not dummyDrone:
+                vehicle.simple_goto(LocationGlobalRelative(lat=grid_path_latlong[current_move_index, 0], lon=grid_path_latlong[current_move_index, 1], alt=7.62))
+            else:
+                logger.debug(f"Dummy move to {grid_path_latlong[current_move_index, :]}")
+            current_move_start_time = time.time()
             logger.debug("Failed to locate logo in POI search, falling back to grid search")
-            #TODO: Fallback
-            pathFuture = asyncio.create_task(gd.FollowGlobalPath(grid_path_latlong))
-            while not logo_found and not pathFuture.done():
-                logger.debug("Visit start")
+            print("Failed to locate logo in POI search, falling back to grid search")
+ 
+            while not logo_found:
                 err = cam.grab(status)
+                print("Fallback")
+                if (not gd.IsMoving(vehicle) and gd.IsCloseEnough(vehicle, grid_path_latlong[current_move_index, :])) or (time.time() - current_move_start_time> 20):
+                    current_move_index += 1
+                    if current_move_index < np.shape(grid_path_latlong)[0]:
+                        if not dummyDrone:
+                            vehicle.simple_goto(LocationGlobalRelative(lat=grid_path_latlong[current_move_index, 0], lon=grid_path_latlong[current_move_index, 1], alt=7.62))
+                        else:
+                            logger.debug(f"Dummy move to {grid_path_latlong[current_move_index, :]}")
+                        print(f"Moving to index {current_move_index}")
+                        current_move_start_time = time.time();
+                    
                 if err == sl.ERROR_CODE.SUCCESS:
                     ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
                     frame_status = True
                     img = zedImage.get_data()
                     logo_found, *_ = logoDetector.processFrame(vehicle, img)
+                else:
+                    print("Error with ZED")
+                    print(err)
     
     
     # At this point, the logo has been found and is within the FOV of the downward camera
@@ -385,7 +410,7 @@ async def mainFunc():
                 ftemp = cam.retrieve_image(zedImage, sl.VIEW.LEFT_GRAY, sl.MEM.CPU, imageSize)
                 frame_status = True
                 img = zedImage.get_data()
-
+                
                 logging.getLogger("timing").debug(f"Frame took {(time.time()-frame_acq_start)*1000} ms") # Log frame acquisition time
                 frame_acq_pos_end = utm.from_latlon(vehicle.location.global_relative_frame.lat, vehicle.location.global_relative_frame.lon)
                 logger.debug(f"Vehicle moved {frame_acq_pos_end[0]-frame_acq_pos[0]} {frame_acq_pos_end[1]-frame_acq_pos[1]} since frame capture")
@@ -412,28 +437,34 @@ async def mainFunc():
                         logo_center = (bbox[0]+bbox[2]/2, bbox[1]+bbox[3]/2)
                         logo_found = True
                         logger.debug("Logo not found, position interpolated")
+                        print("Logo not found, position interpolated")
                     elif not logo_found:
                         logger.critical("Logo not found, FAILED position interpolated")
+                        print("Logo not found, FAILED position interpolated")
                     else:
                         logger.critical("Logo tracker updated failure")
                     
                 if logo_found:
                     # from dronekit import VehicleMode
                     # vehicle.mode = VehicleMode('LAND')
-                    cv2.circle(img, logo_center.astype(np.int32).flatten(), 15, (255, 255, 0), 4)
+                    cv2.circle(img, np.asarray(logo_center).astype(np.int32).flatten(), 15, (255, 255, 0), 4)
                     logo_position_relative = pixCoordToRelativePosition(vehicle, down_cam_info, logo_center)
                     logo_x_angle, logo_y_angle = pixCoordToAngle(logo_center, down_cam_info.hfov, down_cam_info.vfov, down_cam_info.resolution[0], down_cam_info.resolution[1])
                     logger.debug(f"XY Angle {logo_x_angle} {logo_y_angle}")
-                    Utils.dumpDebugData("logo_seek", logo_found=logo_found, x_l=logo_center.item(0), y_l=logo_center.item(1),
-                        x_lr=logo_position_relative.flatten().item(0), y_lr=logo_position_relative.flatten().item(1),
-                        dist=float(np.linalg.norm(logo_position_relative)), mission_time=mtime)
-                    telem_logger.writeValues(logo_info=dict(logo_found=logo_found, x_l=logo_center.item(0), y_l=logo_center.item(1),
-                        x_lr=logo_position_relative.flatten().item(0), y_lr=logo_position_relative.flatten().item(1),
-                        dist=float(np.linalg.norm(logo_position_relative))))
+                    try:
+                        Utils.dumpDebugData("logo_seek", logo_found=logo_found, x_l=logo_center[0], y_l=logo_center[1],
+                            x_lr=logo_position_relative.flatten()[0], y_lr=logo_position_relative.flatten()[1],
+                            dist=float(np.linalg.norm(logo_position_relative)), mission_time=mtime)
+                        telem_logger.writeValues(logo_info=dict(logo_found=logo_found, x_l=logo_center[0], y_l=logo_center[1],
+                            x_lr=logo_position_relative.flatten()[0], y_lr=logo_position_relative.flatten()[1],
+                            dist=float(np.linalg.norm(logo_position_relative))))
+                    except Exception as err:
+                        print(err)
+                        logger.debug(err)
 
                     if logo_tracker is None:
                         logger.debug(f"Initialized logo tracker with {logo_bbox}")
-                        logo_tracker = cv2.TrackerMedianFlow_create()
+                        logo_tracker = cv2.legacy.TrackerMedianFlow_create()
                         logo_tracker.init(img, logo_bbox)
 
 
@@ -477,10 +508,10 @@ async def mainFunc():
                             print("Average homing timeout. Will retry")
                             logo_relative_avg = logo_relative_avg / logo_relative_avg_num
                             logo_relative_avg[2] = 0
-                            logger.info(f"Performing Horizontal homing by {0 - logo_relative_avg[0]} {0 - logo_relative_avg[1]}")
-                            print(f"Performing Horizontal homing by {0 - logo_relative_avg[0]} {0 -logo_relative_avg[1]}")
+                            logger.info(f"Performing Horizontal homing by {logo_relative_avg[0]} {logo_relative_avg[1]}")
+                            print(f"Performing Horizontal homing by {logo_relative_avg[0]} {logo_relative_avg[1]}")
                             gd.SetGuided(vehicle)
-                            await gd.GoToTargetBody(vehicle, 0 - logo_relative_avg[1], 0 - logo_relative_avg[0], 0, stop_speed=0.04, timeout=6)
+                            await gd.GoToTargetBody(vehicle, logo_relative_avg[1], logo_relative_avg[0], 0, stop_speed=0.04, timeout=6)
                             horizontal_home_done = False
                             avg_home_start_time = 0
                             logo_relative_avg_num = 0
